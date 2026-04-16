@@ -12,16 +12,18 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>('context')
   const [loading, setLoading] = useState(false)
   const [graphState, setGraphState] = useState<{ nodes: DattackNode[]; edges: DattackEdge[] }>({ nodes: [], edges: [] })
+  const [pendingSessionId, setPendingSessionId] = useState<string | undefined>()
   const [sessionId, setSessionId] = useState('')
   const [streamLog, setStreamLog] = useState<string[]>([])
   const [analysisNodes, setAnalysisNodes] = useState<DattackNode[]>([])
   const [analysisEdges, setAnalysisEdges] = useState<DattackEdge[]>([])
 
-  async function handleContextSubmit(req: ContextRequest) {
+  async function handleContextSubmit(req: ContextRequest, file: File | null) {
     setLoading(true)
     try {
-      const res = await submitContext(req)
-      setGraphState(res)
+      const res = await submitContext(req, file)
+      setGraphState({ nodes: res.nodes, edges: res.edges })
+      setPendingSessionId(res.pending_session_id)
       setPhase('map')
     } finally {
       setLoading(false)
@@ -29,7 +31,7 @@ export default function App() {
   }
 
   async function handleApprove(nodes: DattackNode[], edges: DattackEdge[]) {
-    const res = await approveMap(nodes, edges)
+    const res = await approveMap(nodes, edges, pendingSessionId)
     setSessionId(res.session_id)
     setStreamLog([])
     setAnalysisNodes([])

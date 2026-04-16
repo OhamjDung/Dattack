@@ -16,7 +16,7 @@ export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComp
   const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    const es = createSSEStream(onLog, onNodeAdd, onComplete)
+    const es = createSSEStream(sessionId, onLog, onNodeAdd, onComplete)
     esRef.current = es
     return () => {
       es.close()

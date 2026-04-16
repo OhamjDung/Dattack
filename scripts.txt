@@ -1,0 +1,126 @@
+⏺ This is a much stronger architecture. Deterministic scripts give you reliable,
+  repeatable outputs that the LLM can interpret rather than hallucinate. Here are 20
+  scripts organized by category:                      
+                              
+  ---                                                                            
+  Data Quality                                        
+  1. field_profile.py — per-column: dtype, null %, unique count, min/max/mean/std
+  2. missing_patterns.py — which fields go missing together, null correlation matrix  
+  3. duplicate_detection.py — exact + near-duplicate rows, key overlap %            
+  4. data_type_audit.py — detects mixed types, malformed dates, numeric-as-string     
+                                                                                      
+  Distributions & Shape                                                               
+  5. distribution_analysis.py — skewness, kurtosis, normality test per numeric field  
+  6. outlier_detection.py — IQR + Z-score outliers per column, flagged rows           
+  7. categorical_frequency.py — value counts, top-N, long-tail ratio per categorical  
+  8. numeric_binning.py — optimal bin boundaries, which bin holds the most mass       
+                                                                                      
+  Relationships                                                                       
+  9. correlation_matrix.py — Pearson/Spearman pairwise, top 10 strongest pairs        
+  10. feature_importance.py — mutual information + random forest importance vs a      
+  target column                                                                       
+  11. cross_tabulation.py — crosstab heatmap between categorical pairs                
+  12. segment_comparison.py — compare numeric distributions across each categorical   
+  segment                                                                             
+                                                                                      
+  Time Series (if date column detected)                                               
+  13. trend_analysis.py — overall slope, direction, magnitude per numeric field over
+  time                                                                                
+  14. seasonality_detection.py — weekly/monthly/yearly repeating patterns             
+  15. peak_valley_detection.py — local maxima/minima, biggest swings
+  16. growth_rate_analysis.py — period-over-period % change, CAGR                     
+                                                                   
+  Business / Behavioral                                                               
+  17. pareto_analysis.py — which 20% of entities drive 80% of a metric                
+  18. cohort_analysis.py — group by first-seen period, track retention/value over time
+  19. concentration_analysis.py — Gini coefficient, HHI — how concentrated is the     
+  metric                                                                              
+  20. anomaly_score.py — Isolation Forest row-level anomaly score across full dataset 
+                                                                                      
+  ---                                 
+
+  ⏺ Statistical Tests                                                                   
+                                                                                      
+  21. normality_tests.py — Shapiro-Wilk, D'Agostino, Anderson-Darling per numeric
+  field, pass/fail                                                                    
+  22. variance_analysis.py — Levene's test, compare variance across groups (is spread 
+  equal?)                                                                             
+  23. anova_test.py — one-way ANOVA: does the mean of a numeric field differ across
+  categories?                                                                         
+  24. chi_square_test.py — chi-square independence test for every categorical pair    
+  25. stationarity_test.py — ADF + KPSS tests on time series fields (is the series    
+  stationary?)                                                                        
+                                                                                      
+  Advanced Time Series                                                                
+  26. lag_correlation.py — cross-correlation at lag 1–12, find which field predicts   
+  another with a delay                                                                
+  27. changepoint_detection.py — detect structural breaks where mean/variance shifts  
+  permanently                                                      
+  28. rolling_volatility.py — rolling std/CV over time, find periods of high vs low   
+  stability                                   
+  29. forecast_baseline.py — naive, moving average, and exponential smoothing         
+  forecasts + error                                                
+  30. cycle_detection.py — FFT-based dominant frequencies, find hidden periodicity    
+                                                                   
+  Ranking & Scoring                                                                   
+  31. percentile_ranking.py — assign each row a percentile rank per numeric column
+  32. composite_score.py — build a weighted z-score composite index across all numeric
+   fields                                                          
+  33. top_bottom_analysis.py — deep profile of top 10% vs bottom 10% rows, what       
+  separates them                                                                      
+  34. tier_segmentation.py — auto-segment into Low/Mid/High tiers per column using    
+  natural breaks (Jenks)                                                              
+  35. winner_loser.py — rank entities by % change between first and last period       
+                                                                   
+  Text & Categorical Intelligence                                                     
+  36. cardinality_analysis.py — flag high-cardinality categoricals that are
+  near-unique IDs vs usable features                                                  
+  37. string_pattern_mining.py — regex-detect emails, phone numbers, codes, currencies
+   in text fields                                                                     
+  38. category_drift.py — if time column exists: which categories are growing vs      
+  shrinking in share                           
+  39. label_co_occurrence.py — which category values appear together most in the same 
+  row                                                              
+  40. edit_distance_clustering.py — cluster similar string values (catch "New York" vs
+   "new york" vs "NY")                                             
+                                                                                      
+  Relationships & Networks                                         
+  41. pairwise_scatter_stats.py — for each numeric pair: R², p-value, regression slope
+  42. multicollinearity_check.py — VIF scores, flag features that are near-linear
+  combinations of others                                                              
+  43. partial_correlation.py — correlation between two fields controlling for all
+  others                                                                              
+  44. interaction_effects.py — does the relationship between A and B change across    
+  segments of C?                                                                      
+  45. entity_frequency_graph.py — build co-occurrence network between categorical     
+  fields, find hubs                                                
+                                                                                      
+  Financial / Business Metrics
+  46. revenue_decomposition.py — split metric change into volume effect vs rate effect
+   (price × qty style)                                             
+  47. retention_curve.py — given a cohort column, compute period-N retention rates    
+  48. ltv_approximation.py — estimate lifetime value distribution from repeat
+  transaction data                                                                    
+  49. funnel_analysis.py — if ordered stages exist: conversion rate and drop-off at
+  each step                                                                           
+  50. benchmark_comparison.py — compute z-score of each entity vs the group mean, flag
+   outliers by name    
+  ---                                 
+
+
+  The pipeline would be:                                                              
+                                                                                      
+  upload CSV                                                       
+      ↓                                        
+  auto-detect schema (date cols, target col, categoricals)                            
+      ↓                                       
+  run all applicable scripts in parallel                                              
+      ↓                                                            
+  each script outputs a structured JSON summary                                       
+      ↓                                       
+  Gemini gets: user goal + all 20 JSON summaries                                      
+      ↓                                                            
+  final synthesis: findings + chart recommendations                                   
+                                              
+  Each script is ~50-100 lines of pure pandas/scipy — no LLM involved, fully          
+  deterministic. Gemini only sees the outputs, not the raw data.  

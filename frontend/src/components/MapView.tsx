@@ -81,7 +81,7 @@ function MapCanvas({ initialNodes, initialEdges, onApprove, externalNodes = [], 
     if (!selected || !feedback.trim()) return
     setSubmitting(true)
     try {
-      const res = await submitFeedback(selected.id, feedback, deeper)
+      const res = await submitFeedback(selected.id, feedback, deeper, nodes as any)
       setNodes((ns) => {
         const updatedIds = new Set(res.updated_nodes.map((n) => n.id))
         const merged = ns.map((n) => {

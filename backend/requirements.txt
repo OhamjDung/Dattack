@@ -2,4 +2,9 @@ fastapi
 uvicorn[standard]
 sse-starlette
 python-multipart
-anthropic
+python-dotenv
+google-genai
+pandas
+numpy
+scipy
+scikit-learn

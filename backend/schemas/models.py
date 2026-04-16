@@ -42,22 +42,26 @@ class ContextRequest(BaseModel):
 
 class ResearchRequest(BaseModel):
     session_id: str
+    nodes: list["Node"] = []
 
 
 class FeedbackRequest(BaseModel):
     node_id: str
     feedback: str
     deeper_research: bool = False
+    nodes: list["Node"] = []
 
 
 class ApproveRequest(BaseModel):
     nodes: list[Node]
     edges: list[Edge]
+    pending_session_id: Optional[str] = None
 
 
 class ContextResponse(BaseModel):
     nodes: list[Node]
     edges: list[Edge]
+    pending_session_id: Optional[str] = None
 
 
 class ResearchResponse(BaseModel):
