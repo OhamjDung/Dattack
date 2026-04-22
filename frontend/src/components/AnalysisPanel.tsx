@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { Activity } from 'lucide-react'
 import { createSSEStream } from '../api/client'
 import type { DattackNode, DattackEdge } from '../types/graph'
 
@@ -9,19 +8,17 @@ interface Props {
   onLog: (msg: string) => void
   onNodeAdd: (node: DattackNode, edge: DattackEdge) => void
   onComplete: (summary: string) => void
+  isComplete?: boolean
 }
 
-export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComplete }: Props) {
+export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComplete, isComplete = false }: Props) {
   const logRef = useRef<HTMLDivElement>(null)
   const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    const es = createSSEStream(sessionId, onLog, onNodeAdd, onComplete)
-    esRef.current = es
-    return () => {
-      es.close()
-      esRef.current = null
-    }
+    if (!sessionId) return
+    esRef.current = createSSEStream(sessionId, onLog, onNodeAdd, onComplete)
+    return () => { esRef.current?.close() }
   }, [sessionId])
 
   useEffect(() => {
@@ -29,22 +26,37 @@ export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComp
   }, [log])
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 h-56 bg-slate-900 border-t border-slate-700 flex flex-col">
-      <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-700">
-        <Activity size={14} className="text-indigo-400 animate-pulse" />
-        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wide">Live Analysis</span>
-        <span className="text-xs text-slate-500 ml-1">Session {sessionId.slice(0, 8)}</span>
+    <div className="terminal-panel">
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '14px 20px',
+        borderBottom: '1px solid rgba(255,255,255,0.08)',
+      }}>
+        {!isComplete && <div className="pulse-dot" />}
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--orange)' }}>
+          Live Analysis
+        </div>
+        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginLeft: 8, fontFamily: 'monospace' }}>
+          {sessionId.slice(0, 8)}
+        </span>
       </div>
-      <div ref={logRef} className="flex-1 overflow-auto px-4 py-2 space-y-1 font-mono">
+
+      <div ref={logRef} className="terminal-log">
+        {log.length === 0 && (
+          <div className="log-line" style={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>Initializing…</div>
+        )}
         {log.map((line, i) => (
-          <div key={i} className="text-xs text-slate-300">
-            <span className="text-indigo-400 mr-2">›</span>{line}
+          <div key={i} className={`log-line${line.startsWith('✓') ? ' done-line' : ''}`}>
+            <span className="prompt">{line.startsWith('✓') ? '✓' : '›'}</span>
+            {line.replace(/^✓\s?/, '')}
           </div>
         ))}
-        {log.length === 0 && (
-          <div className="text-xs text-slate-500 italic">Initializing analysis stream…</div>
+        {!isComplete && (
+          <div className="log-line">
+            <span className="prompt">›</span>
+            <span className="cursor-blink" />
+          </div>
         )}
-        <div className="inline-block w-1.5 h-3 bg-indigo-400 animate-pulse ml-4" />
       </div>
     </div>
   )

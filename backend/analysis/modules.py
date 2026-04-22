@@ -1,5 +1,39 @@
 import json
 
+CURIOSITY_MODULE_REGISTRY: dict[str, dict[str, str]] = {
+    "foundation": {
+        "schema_detector":     "analysis.scripts.foundation.schema_detector",
+        "field_profile":       "analysis.scripts.foundation.field_profile",
+        "data_quality_report": "analysis.scripts.foundation.data_quality_report",
+    },
+    "structure": {
+        "entity_type_guesser":       "analysis.curiosity_scripts.structure.entity_type_guesser",
+        "target_col_candidates":     "analysis.curiosity_scripts.structure.target_col_candidates",
+        "column_role_classifier":    "analysis.curiosity_scripts.structure.column_role_classifier",
+        "dataset_shape_classifier":  "analysis.curiosity_scripts.structure.dataset_shape_classifier",
+        "join_key_candidates":       "analysis.curiosity_scripts.structure.join_key_candidates",
+        "boolean_disguise_detector": "analysis.curiosity_scripts.structure.boolean_disguise_detector",
+        "id_column_validator":       "analysis.curiosity_scripts.structure.id_column_validator",
+    },
+    "signals": {
+        "null_intent_detector":         "analysis.curiosity_scripts.signals.null_intent_detector",
+        "outlier_prevalence_screen":    "analysis.curiosity_scripts.signals.outlier_prevalence_screen",
+        "correlation_opportunity":      "analysis.curiosity_scripts.signals.correlation_opportunity",
+        "segment_variable_candidates":  "analysis.curiosity_scripts.signals.segment_variable_candidates",
+        "temporal_coverage_analyzer":   "analysis.curiosity_scripts.signals.temporal_coverage_analyzer",
+        "concentration_screen":         "analysis.curiosity_scripts.signals.concentration_screen",
+        "growth_signal_screen":         "analysis.curiosity_scripts.signals.growth_signal_screen",
+        "anomaly_prevalence_screen":    "analysis.curiosity_scripts.signals.anomaly_prevalence_screen",
+        "cardinality_screen":           "analysis.curiosity_scripts.signals.cardinality_screen",
+    },
+    "hypotheses": {
+        "analysis_hypothesis_builder":   "analysis.curiosity_scripts.hypotheses.analysis_hypothesis_builder",
+        "missing_analysis_detector":     "analysis.curiosity_scripts.hypotheses.missing_analysis_detector",
+        "composite_metric_opportunity":  "analysis.curiosity_scripts.hypotheses.composite_metric_opportunity",
+        "benchmark_opportunity_detector":"analysis.curiosity_scripts.hypotheses.benchmark_opportunity_detector",
+    },
+}
+
 MODULE_REGISTRY: dict[str, dict[str, str]] = {
     "foundation": {
         "schema_detector":     "analysis.scripts.foundation.schema_detector",

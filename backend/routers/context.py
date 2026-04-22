@@ -1,6 +1,13 @@
+from __future__ import annotations
+import io
 import uuid
+
+import pandas as pd
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
+
+from analysis.context import AnalysisContext
+from analysis.curiosity_runner import run_curiosity_pipeline
 from schemas.models import ContextResponse
 from services.gemini_service import generate_initial_map
 from services import session_store
@@ -16,15 +23,24 @@ async def create_context(
     ideas: str = Form(""),
     file: UploadFile = File(None),
 ):
-    nodes, edges = generate_initial_map(goal, why, available_data, ideas)
-
-    # Store csv_bytes + goal under a temporary key so /approve can retrieve it
     session_id = str(uuid.uuid4())
     session_data: dict = {"goal": goal, "pending": True}
+    curiosity_outputs = None
+
     if file is not None:
         contents = await file.read()
         session_data["csv_bytes"] = contents
         session_data["filename"] = file.filename
+
+        try:
+            df = pd.read_csv(io.BytesIO(contents))
+            ctx = AnalysisContext(df=df, goal=goal)
+            curiosity_outputs = await run_curiosity_pipeline(ctx)
+            session_data["curiosity_outputs"] = curiosity_outputs
+        except Exception:
+            curiosity_outputs = None
+
+    nodes, edges = generate_initial_map(goal, why, available_data, ideas, curiosity_outputs)
 
     session_store.save(f"pending_{session_id}", session_data)
 

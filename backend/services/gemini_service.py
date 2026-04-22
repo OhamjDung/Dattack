@@ -91,8 +91,43 @@ def _map_prompt(nodes_spec: str) -> str:
 {nodes_spec}"""
 
 
-def generate_initial_map(goal: str, why: str, available_data: str, ideas: str) -> tuple[list[Node], list[Edge]]:
-    spec = f"""Generate an analysis map for:
+def generate_initial_map(
+    goal: str,
+    why: str,
+    available_data: str,
+    ideas: str,
+    curiosity_outputs: dict | None = None,
+) -> tuple[list[Node], list[Edge]]:
+    if curiosity_outputs:
+        questions_text = "\n".join(
+            f"  - [{q['confidence']:.0%}] {q['label']}: {q['description']}"
+            for q in curiosity_outputs.get("question_candidates", [])[:6]
+        )
+        techniques_text = "\n".join(
+            f"  - [{t['confidence']:.0%}] {t['label']}: {t['description']}"
+            for t in curiosity_outputs.get("technique_candidates", [])[:6]
+        )
+        summary = curiosity_outputs.get("data_summary", {})
+        shape = summary.get("shape", {})
+        spec = f"""Generate an analysis map grounded in real data.
+Goal: {goal}
+Why it matters: {why}
+Dataset: {shape.get('rows', '?')} rows × {shape.get('cols', '?')} columns
+
+Data-driven questions the AI identified (use the most important as question nodes):
+{questions_text}
+
+Data-driven technique candidates (use the most relevant as technique nodes):
+{techniques_text}
+
+Include:
+- 1 goal node (id: "goal-1") capturing the core objective
+- 1-2 data_source nodes (ids: "ds-1", ...) representing the uploaded dataset
+- 2-3 technique nodes (ids: "tech-1", ...) from the technique candidates above
+- 2-3 question nodes (ids: "q-1", ...) from the most important questions above
+Connect each data_source and technique to "goal-1", and "goal-1" to each question."""
+    else:
+        spec = f"""Generate an analysis map for:
 Goal: {goal}
 Why it matters: {why}
 Available data: {available_data}
@@ -108,16 +143,61 @@ Connect each data_source to "goal-1", and "goal-1" to each question."""
     return _parse_json_nodes(response.text)
 
 
-def generate_research_nodes(nodes: list[Node], goal: str) -> tuple[list[Node], list[Edge]]:
+def generate_research_nodes(
+    nodes: list[Node],
+    goal: str,
+    curiosity_outputs: dict | None = None,
+    iteration: int = 1,
+) -> tuple[list[Node], list[Edge]]:
+    existing_labels = {n.data.label for n in nodes}
     existing = "\n".join(f"  - {n.data.type}: {n.data.label}" for n in nodes)
-    spec = f"""Expand this analysis map.
+
+    if curiosity_outputs:
+        # Filter out candidates already represented in the map
+        remaining_q = [
+            q for q in curiosity_outputs.get("question_candidates", [])
+            if not any(q["label"].lower() in label.lower() or label.lower() in q["label"].lower()
+                       for label in existing_labels)
+        ][:4]
+        remaining_t = [
+            t for t in curiosity_outputs.get("technique_candidates", [])
+            if not any(t["label"].lower() in label.lower() or label.lower() in t["label"].lower()
+                       for label in existing_labels)
+        ][:4]
+
+        if not remaining_q and not remaining_t:
+            return [], []
+
+        questions_text = "\n".join(
+            f"  - {q['label']}: {q['description']}" for q in remaining_q
+        )
+        techniques_text = "\n".join(
+            f"  - {t['label']}: {t['description']}" for t in remaining_t
+        )
+        spec = f"""Expand this analysis map (research iteration {iteration}).
+Goal: {goal}
+
+Current map nodes:
+{existing}
+
+New data-driven questions not yet covered (add the most important as question nodes):
+{questions_text or '(none remaining)'}
+
+New technique suggestions not yet covered (add the most relevant as technique nodes):
+{techniques_text or '(none remaining)'}
+
+Add only nodes that are NOT already in the current map.
+If nothing meaningful to add, return an empty nodes array.
+Use ids like "r{iteration}-q1", "r{iteration}-t1". Connect all to "goal-1"."""
+    else:
+        spec = f"""Expand this analysis map.
 Goal: {goal}
 Current nodes:
 {existing}
 
 Add:
-- 1-2 technique nodes (ids: "tech-1", "tech-2") — specific analysis methods
-- 1 question node (id: "q-r1") — one more clarifying question
+- 1-2 technique nodes (ids: "tech-{iteration}-1", ...) — specific analysis methods
+- 1 question node (id: "q-r{iteration}") — one more clarifying question
 Connect all to "goal-1"."""
 
     response = _get_client().models.generate_content(model=_MODEL, contents=_map_prompt(spec))
