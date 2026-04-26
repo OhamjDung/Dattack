@@ -89,6 +89,7 @@ export default function App() {
   const [analysisNodes, setAnalysisNodes] = useState<DattackNode[]>([])
   const [analysisEdges, setAnalysisEdges] = useState<DattackEdge[]>([])
   const [isComplete, setIsComplete] = useState(false)
+  const [activeScript, setActiveScript] = useState('')
 
   async function runResearchLoop(pid: string, initialNodes: DattackNode[], initialEdges: DattackEdge[]) {
     setResearching(true)
@@ -175,7 +176,7 @@ export default function App() {
           researching={researching}
           researchWave={researchWave}
           researchLabel={researchLabel}
-          totalWaves={MAX_RESEARCH_ROUNDS}
+
         />
       )}
       {phase === 'analysis' && (
@@ -187,6 +188,7 @@ export default function App() {
             externalEdges={analysisEdges}
             onApprove={() => {}}
             isAnalysis
+            activeScript={activeScript}
           />
           <AnalysisPanel
             sessionId={sessionId}
@@ -194,11 +196,18 @@ export default function App() {
             onLog={handleLog}
             onNodeAdd={handleNodeAdd}
             onComplete={handleComplete}
+            onScriptRunning={setActiveScript}
             isComplete={isComplete}
           />
         </>
       )}
-      {phase === 'viz' && <VizPanel />}
+      {phase === 'viz' && (
+        <VizPanel
+          nodes={mergeNodes(allMapNodes, analysisNodes)}
+          edges={mergeEdges(allMapEdges, analysisEdges)}
+          streamLog={streamLog}
+        />
+      )}
     </>
   )
 }

@@ -32,6 +32,9 @@ class AnalysisContext:
 
     active_modules: list[str] = field(default_factory=list)
 
+    abort: bool = False
+    abort_reason: str = ""
+
     def to_gemini_summary(self) -> dict:
         return {
             "goal": self.goal,

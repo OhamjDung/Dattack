@@ -6,7 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Dattack — Human-in-the-Loop AI Data Consultant. User provides a CSV + goal. The system builds a live React Flow node map, runs a deterministic script pipeline against the data, then an LLM synthesises findings via SSE streaming and animates finding nodes onto the map.
 
-**LLM backend:** GitHub Models via OpenAI-compatible API at `https://models.github.ai/inference`. Default model: `deepseek/DeepSeek-R1-0528`. All LLM calls go through `backend/services/gemini_service.py` (name kept for compatibility).
+**LLM backend:** GitHub Models via OpenAI-compatible API at `https://models.github.ai/inference`. Default model: `openai/gpt-4o-mini` (Low tier: 15 RPM / 150 RPD). All LLM calls go through `backend/services/gemini_service.py` (name kept for compatibility).
+
+**Model rate limits (GitHub Models free tier):**
+- `openai/gpt-4o-mini` — Low: 15 RPM, 150 RPD ← current default
+- `deepseek/DeepSeek-R1-0528` — DeepSeek tier: 1 RPM, 8 RPD (avoid — too restrictive)
+- To switch models: edit `_MODEL` at top of `backend/services/gemini_service.py`
 
 **Dead files** (leftover from initial Claude API prototype, not used): `backend/services/claude_service.py`, `backend/services/claude_stream.py`.
 

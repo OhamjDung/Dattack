@@ -70,6 +70,43 @@ def _topological_waves(scripts: dict[str, Any]) -> list[list[str]]:
     return waves
 
 
+def _sample_diverse_rows(ctx: AnalysisContext, max_rows: int = 8) -> list[dict]:
+    """Pick semantically diverse rows: min/median/max for numeric cols, top categories for categorical."""
+    df = ctx.df
+    if df.empty:
+        return []
+
+    selected_indices: set[int] = set()
+
+    for col in ctx.numeric_cols[:3]:
+        try:
+            col_clean = df[col].dropna()
+            if col_clean.empty:
+                continue
+            selected_indices.add(int(col_clean.idxmin()))
+            selected_indices.add(int(col_clean.index[len(col_clean) // 2]))
+            selected_indices.add(int(col_clean.idxmax()))
+        except Exception:
+            continue
+
+    for col in ctx.categorical_cols[:2]:
+        try:
+            top_vals = df[col].value_counts().head(3).index
+            for val in top_vals:
+                matches = df.index[df[col] == val].tolist()
+                if matches:
+                    selected_indices.add(int(matches[0]))
+        except Exception:
+            continue
+
+    indices = sorted(selected_indices)[:max_rows]
+    if not indices:
+        indices = list(range(min(3, len(df))))
+
+    rows = df.iloc[indices].fillna("").astype(str)
+    return rows.to_dict(orient="records")
+
+
 def _apply_schema(ctx: AnalysisContext) -> None:
     from analysis.runner import _apply_schema as _base_apply_schema
     _base_apply_schema(ctx)
@@ -132,4 +169,5 @@ async def run_curiosity_pipeline(ctx: AnalysisContext) -> dict[str, Any]:
         "question_candidates": dedup(all_questions),
         "technique_candidates": dedup(all_techniques),
         "data_summary": ctx.to_gemini_summary(),
+        "sampled_rows": _sample_diverse_rows(ctx),
     }

@@ -16,4 +16,4 @@ async def stream_endpoint(session_id: str):
         async for event in run_and_stream(data):
             yield event
 
-    return EventSourceResponse(generator())
+    return EventSourceResponse(generator(), ping=15)

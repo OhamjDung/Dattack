@@ -42,11 +42,14 @@ async def run_and_stream(session_data: dict[str, Any]) -> AsyncGenerator[dict, N
         etype = event.get("event")
 
         if etype == "__done__":
+            print(f"[SSE] pipeline done", flush=True)
             break
         elif etype == "__error__":
+            print(f"[SSE] pipeline error: {event.get('error', '')[:200]}", flush=True)
             yield {"event": "error", "data": json.dumps({"message": event.get("error", "Unknown error")})}
             return
         elif etype == "log":
+            print(f"[SSE] log: {event.get('message', '')}", flush=True)
             yield {"event": "log", "data": json.dumps({"message": event.get("message", "")})}
         elif etype == "script_complete":
             status = event.get("status", "ok")
@@ -57,6 +60,16 @@ async def run_and_stream(session_data: dict[str, Any]) -> AsyncGenerator[dict, N
             if findings_count:
                 msg += f" ({findings_count} finding{'s' if findings_count != 1 else ''})"
             yield {"event": "log", "data": json.dumps({"message": msg})}
+            yield {"event": "script_complete", "data": json.dumps({"script": script, "status": status})}
+        elif etype == "node_add":
+            yield {"event": "node_add", "data": json.dumps(
+                {"node": event["node"], "edge": event["edge"]}
+            )}
+        elif etype == "script_running":
+            print(f"[SSE] script_running: {event.get('script', '')}", flush=True)
+            yield {"event": "script_running", "data": json.dumps(
+                {"script": event.get("script", "")}
+            )}
         elif etype == "modules_selected":
             modules = event.get("modules", [])
             yield {"event": "log", "data": json.dumps(

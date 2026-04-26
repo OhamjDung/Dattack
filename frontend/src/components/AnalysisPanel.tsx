@@ -8,16 +8,17 @@ interface Props {
   onLog: (msg: string) => void
   onNodeAdd: (node: DattackNode, edge: DattackEdge) => void
   onComplete: (summary: string) => void
+  onScriptRunning?: (script: string) => void
   isComplete?: boolean
 }
 
-export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComplete, isComplete = false }: Props) {
+export default function AnalysisPanel({ sessionId, log, onLog, onNodeAdd, onComplete, onScriptRunning, isComplete = false }: Props) {
   const logRef = useRef<HTMLDivElement>(null)
   const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
     if (!sessionId) return
-    esRef.current = createSSEStream(sessionId, onLog, onNodeAdd, onComplete)
+    esRef.current = createSSEStream(sessionId, onLog, onNodeAdd, onComplete, onScriptRunning)
     return () => { esRef.current?.close() }
   }, [sessionId])
 

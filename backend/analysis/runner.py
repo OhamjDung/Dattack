@@ -120,6 +120,8 @@ async def run_pipeline(ctx: AnalysisContext, event_queue: asyncio.Queue) -> Anal
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         for wave in foundation_waves:
+            for script_name in wave:
+                emit({"event": "script_running", "script": script_name})
             await _run_wave(wave, foundation_scripts, ctx, emit, executor)
 
     _apply_schema(ctx)
@@ -127,6 +129,18 @@ async def run_pipeline(ctx: AnalysisContext, event_queue: asyncio.Queue) -> Anal
         ctx.profile = ctx.results["field_profile"]["data"].get("column_stats", {})
     if "data_quality_report" in ctx.results:
         ctx.quality = ctx.results["data_quality_report"]["data"]
+
+    # Short-circuit if foundation flagged a critical data issue
+    if ctx.abort:
+        emit({"event": "log", "message": f"⚠ Aborting pipeline: {ctx.abort_reason}"})
+        return ctx
+
+    # Generate quick insights from foundation data before Phase 2 starts
+    from services.gemini_service import generate_quick_insights
+    loop = asyncio.get_running_loop()
+    quick = await loop.run_in_executor(None, generate_quick_insights, ctx)
+    for node_dict, edge_dict in quick:
+        emit({"event": "node_add", "node": node_dict, "edge": edge_dict})
 
     emit({"event": "log", "message": "Selecting analysis modules…"})
     ctx.active_modules = await select_modules(ctx.to_gemini_summary(), ctx.goal)
@@ -139,8 +153,13 @@ async def run_pipeline(ctx: AnalysisContext, event_queue: asyncio.Queue) -> Anal
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         for i, wave in enumerate(waves):
+            if ctx.abort:
+                emit({"event": "log", "message": f"⚠ Aborting remaining waves: {ctx.abort_reason}"})
+                break
             emit({"event": "log",
                   "message": f"Wave {i+1}/{total}: {', '.join(wave)}"})
+            for script_name in wave:
+                emit({"event": "script_running", "script": script_name})
             await _run_wave(wave, all_scripts, ctx, emit, executor)
 
     emit({"event": "log", "message": "All scripts complete. Synthesising findings…"})

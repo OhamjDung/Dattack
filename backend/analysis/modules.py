@@ -99,23 +99,34 @@ MODULE_REGISTRY: dict[str, dict[str, str]] = {
     },
 }
 
+MODULE_COMPUTE_COSTS: dict[str, int] = {
+    "exploratory": 2,
+    "time_series": 2,
+    "ranking": 1,
+    "business": 2,
+    "text": 1,
+    "anomaly": 3,
+}
+
 MODULE_SELECTION_PROMPT = """You are a data analysis planner. Select which analysis modules to activate.
 
-Available modules:
-- exploratory: distributions, outliers, correlations, statistical tests — use for understanding patterns and relationships
-- time_series: trends, seasonality, forecasting, changepoints — use ONLY if a datetime column exists
-- ranking: percentile ranks, composite scores, tier segmentation — use when goal involves comparing or ranking entities
-- business: pareto, cohort, retention, LTV, funnel — use when data has transactions, customers, or business KPIs
-- text: string pattern mining, fuzzy clustering — use ONLY if free-text or messy string columns exist
-- anomaly: outlier scoring, duplicates, missing patterns — use when goal involves data quality or finding unusual rows
+Available modules and their compute costs:
+- exploratory (cost 2): distributions, outliers, correlations, statistical tests — for understanding patterns and relationships
+- time_series (cost 2): trends, seasonality, forecasting, changepoints — ONLY if a datetime column exists
+- ranking (cost 1): percentile ranks, composite scores, tier segmentation — when goal involves comparing or ranking entities
+- business (cost 2): pareto, cohort, retention, LTV, funnel — when data has transactions, customers, or business KPIs
+- text (cost 1): string pattern mining, fuzzy clustering — ONLY if free-text or messy string columns exist
+- anomaly (cost 3): outlier scoring, duplicates, missing patterns — when goal involves data quality or unusual rows
+
+Total compute budget: 6 points. Select modules whose costs sum to ≤6.
+Prioritize modules most relevant to the user goal. Do not include "foundation".
 
 Dataset snapshot:
 {summary}
 
 User goal: {goal}
 
-Return ONLY a valid JSON array of module names to activate (never include "foundation"). Max 4 modules.
-Example: ["exploratory", "business", "anomaly"]"""
+Return ONLY a valid JSON array of module names. Example: ["exploratory", "business", "anomaly"]"""
 
 
 def build_selection_prompt(foundation_summary: dict, goal: str) -> str:

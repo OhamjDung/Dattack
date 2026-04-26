@@ -1,0 +1,498 @@
+[
+  {
+    "name": "RFM Analysis",
+    "domain": ["ecommerce", "retail", "crm", "marketing", "customer"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["customer", "purchase", "order", "transaction", "revenue", "spend", "buy"],
+    "questions": [
+      "Which customers are most valuable by recency, frequency, and monetary value?",
+      "Which high-frequency customers have stopped buying recently (lapsed VIPs)?",
+      "What is the revenue concentration across RFM tiers?"
+    ],
+    "techniques": [
+      "Quartile-based RFM scoring (R/F/M each scored 1-4)",
+      "K-means clustering on RFM scores to segment customers",
+      "Cohort comparison of RFM tiers by acquisition period"
+    ]
+  },
+  {
+    "name": "Cohort Retention Analysis",
+    "domain": ["saas", "subscription", "product", "ecommerce", "mobile"],
+    "required_column_types": ["datetime", "categorical"],
+    "required_keywords": ["user", "customer", "signup", "retention", "churn", "active", "session", "cohort", "month"],
+    "questions": [
+      "How does retention differ across acquisition cohorts?",
+      "At which time period does the sharpest churn occur?",
+      "Which cohort has the highest 90-day retention rate?"
+    ],
+    "techniques": [
+      "Cohort table: retention rate by weeks/months since acquisition",
+      "Rolling retention curve with confidence bands",
+      "Survival analysis on churn events"
+    ]
+  },
+  {
+    "name": "Funnel Analysis",
+    "domain": ["saas", "ecommerce", "product", "marketing", "sales"],
+    "required_column_types": ["categorical"],
+    "required_keywords": ["step", "stage", "funnel", "conversion", "signup", "onboard", "checkout", "event", "status"],
+    "questions": [
+      "At which funnel stage is drop-off highest?",
+      "How does conversion rate vary by user segment or channel?",
+      "What is the time-to-convert distribution at each stage?"
+    ],
+    "techniques": [
+      "Ordered stage completion rates with waterfall chart",
+      "Segment breakdown of conversion at each stage",
+      "Time-between-stages distribution analysis"
+    ]
+  },
+  {
+    "name": "Pareto / ABC Analysis",
+    "domain": ["retail", "inventory", "sales", "operations", "finance"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["product", "item", "sku", "revenue", "sales", "quantity", "customer", "category"],
+    "questions": [
+      "What percentage of products account for 80% of revenue?",
+      "Which items/customers should be in tier A vs B vs C?",
+      "Is there dangerous revenue concentration in a few products?"
+    ],
+    "techniques": [
+      "Cumulative revenue curve by item sorted descending",
+      "ABC classification: A (top 80%), B (next 15%), C (bottom 5%)",
+      "Gini coefficient for concentration measurement"
+    ]
+  },
+  {
+    "name": "Customer Lifetime Value (CLV)",
+    "domain": ["ecommerce", "saas", "retail", "subscription", "finance"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["customer", "revenue", "purchase", "order", "churn", "lifetime", "spend"],
+    "questions": [
+      "What is the average and median customer lifetime value?",
+      "How does CLV differ across acquisition channels or segments?",
+      "Which customer attributes predict high lifetime value?"
+    ],
+    "techniques": [
+      "Historical CLV: sum of all transactions per customer",
+      "Predictive CLV using average order value × purchase frequency × retention period",
+      "CLV distribution with percentile breakdown"
+    ]
+  },
+  {
+    "name": "Churn Prediction Analysis",
+    "domain": ["saas", "subscription", "telecom", "finance", "retail"],
+    "required_column_types": ["categorical", "datetime"],
+    "required_keywords": ["churn", "cancel", "lapse", "inactive", "unsubscribe", "retention", "user", "customer"],
+    "questions": [
+      "What behavioral signals precede customer churn?",
+      "Is churn rate accelerating over time?",
+      "Which segment has the highest churn rate?"
+    ],
+    "techniques": [
+      "Churn rate by time period and segment",
+      "Pre-churn behavior pattern analysis (activity decay)",
+      "Logistic regression feature importance for churn drivers"
+    ]
+  },
+  {
+    "name": "Revenue Decomposition",
+    "domain": ["finance", "saas", "ecommerce", "retail", "sales"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["revenue", "sales", "income", "price", "quantity", "volume", "growth"],
+    "questions": [
+      "How much of revenue growth comes from volume vs price changes?",
+      "Which product line or segment drives the most revenue growth?",
+      "What is the revenue bridge from last period to this period?"
+    ],
+    "techniques": [
+      "Volume-price-mix decomposition of revenue delta",
+      "Waterfall chart: new vs expansion vs contraction vs churn revenue",
+      "Rolling 3-month revenue growth attribution by segment"
+    ]
+  },
+  {
+    "name": "A/B Test Significance Analysis",
+    "domain": ["product", "marketing", "ecommerce", "ux"],
+    "required_column_types": ["categorical", "numeric"],
+    "required_keywords": ["test", "experiment", "variant", "control", "treatment", "group", "ab", "conversion"],
+    "questions": [
+      "Is the observed difference between variants statistically significant?",
+      "What is the minimum detectable effect given the sample size?",
+      "Is there a novelty effect biasing early results?"
+    ],
+    "techniques": [
+      "Two-proportion z-test for conversion rate difference",
+      "Mann-Whitney U test for non-normal metric distributions",
+      "Sequential testing to avoid peeking problems"
+    ]
+  },
+  {
+    "name": "Time Series Trend & Seasonality",
+    "domain": ["finance", "retail", "ecommerce", "operations", "marketing"],
+    "required_column_types": ["datetime", "numeric"],
+    "required_keywords": ["date", "time", "month", "week", "year", "trend", "seasonal", "daily", "period"],
+    "questions": [
+      "Is there a statistically significant upward or downward trend?",
+      "What is the seasonal pattern — does performance peak in specific months?",
+      "Are there calendar effects (weekday, holiday) that distort comparisons?"
+    ],
+    "techniques": [
+      "STL decomposition: trend + seasonal + residual components",
+      "Year-over-year and month-over-month growth rates",
+      "Rolling average smoothing to separate signal from noise"
+    ]
+  },
+  {
+    "name": "Anomaly & Outlier Detection",
+    "domain": ["finance", "operations", "fraud", "quality", "security"],
+    "required_column_types": ["numeric"],
+    "required_keywords": ["anomaly", "outlier", "fraud", "error", "unusual", "spike", "drop", "quality"],
+    "questions": [
+      "Which records are statistical outliers that warrant investigation?",
+      "Is there a temporal cluster of anomalies suggesting a systemic issue?",
+      "What attributes distinguish anomalous records from normal ones?"
+    ],
+    "techniques": [
+      "IQR-based outlier flagging per column",
+      "Isolation Forest for multivariate anomaly scoring",
+      "Z-score threshold (|z| > 3) detection with contextual explanation"
+    ]
+  },
+  {
+    "name": "Market Basket / Association Rules",
+    "domain": ["retail", "ecommerce", "grocery", "recommendations"],
+    "required_column_types": ["categorical"],
+    "required_keywords": ["product", "item", "order", "basket", "purchase", "bought", "category", "sku"],
+    "questions": [
+      "Which products are most frequently purchased together?",
+      "What are the highest-lift product associations?",
+      "Are there items that cannibalize each other's sales?"
+    ],
+    "techniques": [
+      "Apriori algorithm for frequent itemsets (min_support=0.02)",
+      "Lift and confidence metrics for association rules",
+      "Co-purchase heatmap by product category"
+    ]
+  },
+  {
+    "name": "Segmentation / Clustering",
+    "domain": ["marketing", "crm", "product", "retail", "healthcare"],
+    "required_column_types": ["numeric"],
+    "required_keywords": ["segment", "cluster", "group", "customer", "user", "patient", "profile", "category"],
+    "questions": [
+      "How many natural customer/user segments exist in the data?",
+      "What are the defining characteristics of each segment?",
+      "Which segment is most valuable or highest risk?"
+    ],
+    "techniques": [
+      "K-means clustering with elbow method for k selection",
+      "Silhouette score to evaluate cluster quality",
+      "PCA for dimensionality reduction before clustering"
+    ]
+  },
+  {
+    "name": "Geographic / Regional Analysis",
+    "domain": ["retail", "logistics", "sales", "healthcare", "real-estate"],
+    "required_column_types": ["categorical"],
+    "required_keywords": ["region", "country", "state", "city", "zip", "location", "area", "store", "territory"],
+    "questions": [
+      "Which regions are over- or under-performing relative to their size?",
+      "Is there geographic clustering of high-value customers?",
+      "What is the penetration rate by market area?"
+    ],
+    "techniques": [
+      "Regional performance index (actual vs expected by population)",
+      "Location-based concentration analysis",
+      "Region-to-region growth rate comparison"
+    ]
+  },
+  {
+    "name": "Price Elasticity Analysis",
+    "domain": ["retail", "ecommerce", "finance", "revenue-management"],
+    "required_column_types": ["numeric"],
+    "required_keywords": ["price", "revenue", "quantity", "demand", "discount", "promotion", "sales"],
+    "questions": [
+      "How sensitive is demand to price changes?",
+      "At what price point does demand drop sharply?",
+      "Does discounting cannibalize full-price purchases?"
+    ],
+    "techniques": [
+      "Log-log regression: ln(quantity) ~ ln(price) for elasticity coefficient",
+      "Price band analysis: volume and revenue by price tier",
+      "Promotion lift analysis: comparing periods with/without discounts"
+    ]
+  },
+  {
+    "name": "Workforce / HR Analytics",
+    "domain": ["hr", "workforce", "talent", "people-analytics"],
+    "required_column_types": ["categorical", "numeric", "datetime"],
+    "required_keywords": ["employee", "hire", "attrition", "salary", "tenure", "department", "performance", "headcount"],
+    "questions": [
+      "Which departments or roles have the highest attrition rates?",
+      "Is there a salary band below which attrition spikes?",
+      "How does tenure distribution vary by department?"
+    ],
+    "techniques": [
+      "Attrition rate by department, tenure band, and compensation quartile",
+      "Survival analysis for time-to-voluntary-exit",
+      "Compensation equity analysis: pay gap by group controlling for role/level"
+    ]
+  },
+  {
+    "name": "Inventory Turnover & Demand Forecasting",
+    "domain": ["retail", "supply-chain", "operations", "logistics", "manufacturing"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["inventory", "stock", "sku", "demand", "supply", "order", "units", "quantity", "warehouse"],
+    "questions": [
+      "Which SKUs have critically low or high inventory relative to demand?",
+      "What is the average days-of-stock-on-hand by product category?",
+      "Are there recurring stockout patterns for high-velocity items?"
+    ],
+    "techniques": [
+      "Inventory turnover ratio: COGS / average inventory value",
+      "Days of inventory outstanding (DIO) by SKU",
+      "Demand volatility coefficient of variation per item"
+    ]
+  },
+  {
+    "name": "Net Promoter Score (NPS) Analysis",
+    "domain": ["cx", "customer-experience", "product", "saas"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["nps", "score", "survey", "rating", "satisfaction", "recommend", "promoter", "detractor"],
+    "questions": [
+      "What is the NPS distribution and how does it differ by segment?",
+      "Which customer attributes predict promoters vs detractors?",
+      "Is NPS trending up or down over time?"
+    ],
+    "techniques": [
+      "NPS segmentation: promoters (9-10), passives (7-8), detractors (0-6)",
+      "NPS by customer segment, product version, or support tier",
+      "Correlation between NPS and retention/expansion revenue"
+    ]
+  },
+  {
+    "name": "Waterfall / Bridge Analysis",
+    "domain": ["finance", "saas", "sales", "operations"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["period", "delta", "change", "revenue", "cost", "variance", "budget", "actual", "forecast"],
+    "questions": [
+      "What are the biggest drivers of the change from period A to period B?",
+      "Which line items explain the variance between actual and budget?",
+      "Is the gap driven by volume, price, or mix effects?"
+    ],
+    "techniques": [
+      "Waterfall decomposition: sorted contributors to total change",
+      "Variance analysis: actual vs budget vs prior period",
+      "Contribution margin bridge by product/segment"
+    ]
+  },
+  {
+    "name": "Correlation & Multicollinearity Analysis",
+    "domain": ["finance", "science", "healthcare", "operations", "marketing"],
+    "required_column_types": ["numeric"],
+    "required_keywords": ["correlation", "relationship", "factor", "variable", "metric", "kpi", "coefficient"],
+    "questions": [
+      "Which metrics are strongly correlated and might be redundant?",
+      "Is there a leading indicator that predicts the target metric?",
+      "Are any variables collinear, reducing model reliability?"
+    ],
+    "techniques": [
+      "Pearson/Spearman correlation matrix with significance testing",
+      "Variance Inflation Factor (VIF) for multicollinearity detection",
+      "Partial correlation controlling for confounding variables"
+    ]
+  },
+  {
+    "name": "Benchmarking & Percentile Ranking",
+    "domain": ["finance", "hr", "sales", "operations", "education"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["benchmark", "rank", "percentile", "performance", "target", "goal", "quota", "industry"],
+    "questions": [
+      "Which entities are in the top and bottom quartile of performance?",
+      "How does performance distribute relative to targets or benchmarks?",
+      "What separates top-decile performers from the median?"
+    ],
+    "techniques": [
+      "Percentile ranking of all entities on key metrics",
+      "Distribution comparison: actual vs benchmark using KDE plot",
+      "Top-decile vs bottom-decile feature contrast analysis"
+    ]
+  },
+  {
+    "name": "Fraud & Data Integrity Detection",
+    "domain": ["finance", "insurance", "healthcare", "compliance"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["fraud", "duplicate", "error", "integrity", "claim", "transaction", "audit", "compliance"],
+    "questions": [
+      "Are there duplicate transactions that suggest data quality issues or fraud?",
+      "Do any amounts follow Benford's Law violations (a fraud signal)?",
+      "Are there patterns of transactions just below approval thresholds?"
+    ],
+    "techniques": [
+      "Benford's Law test on transaction amounts",
+      "Round-number clustering: how many amounts end in .00 or .99?",
+      "Duplicate detection: exact and near-duplicate transaction matching"
+    ]
+  },
+  {
+    "name": "Campaign / Channel Attribution",
+    "domain": ["marketing", "ecommerce", "digital", "advertising"],
+    "required_column_types": ["categorical", "numeric"],
+    "required_keywords": ["campaign", "channel", "source", "medium", "ad", "click", "conversion", "acquisition", "cpa", "roi"],
+    "questions": [
+      "Which acquisition channel has the lowest cost-per-acquisition?",
+      "What is the revenue ROI for each marketing campaign?",
+      "Is there diminishing return on spend above a certain threshold?"
+    ],
+    "techniques": [
+      "CAC and ROI by channel and campaign",
+      "Spend efficiency curve: revenue per dollar by channel",
+      "Time-lag analysis: conversion window by channel"
+    ]
+  },
+  {
+    "name": "Quality Control / SPC Analysis",
+    "domain": ["manufacturing", "operations", "quality", "healthcare"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["quality", "defect", "error", "rate", "measurement", "tolerance", "control", "spec", "sla"],
+    "questions": [
+      "Is the process in statistical control or are there out-of-control signals?",
+      "What percentage of output is within specification limits?",
+      "Are defect rates trending upward over time?"
+    ],
+    "techniques": [
+      "Control chart (X-bar and R chart) for process stability",
+      "Process capability index (Cpk): how centered is output within spec?",
+      "Defect Pareto: which defect types account for 80% of failures?"
+    ]
+  },
+  {
+    "name": "Feature Adoption & Engagement Analysis",
+    "domain": ["product", "saas", "mobile", "software"],
+    "required_column_types": ["categorical", "numeric"],
+    "required_keywords": ["feature", "event", "action", "usage", "adoption", "dau", "mau", "session", "engagement"],
+    "questions": [
+      "Which features have low adoption despite high business value?",
+      "Is there a usage pattern that distinguishes retained vs churned users?",
+      "What is the time-to-first-use for key features after signup?"
+    ],
+    "techniques": [
+      "Feature adoption rate: % of active users who use each feature",
+      "Usage frequency distribution by feature",
+      "Correlation between feature adoption breadth and retention"
+    ]
+  },
+  {
+    "name": "Lead Scoring & Pipeline Analysis",
+    "domain": ["sales", "crm", "b2b", "marketing"],
+    "required_column_types": ["categorical", "numeric"],
+    "required_keywords": ["lead", "opportunity", "pipeline", "deal", "stage", "close", "win", "lose", "crm", "sales"],
+    "questions": [
+      "What is the win rate and average deal size by sales stage?",
+      "Which lead sources produce the highest quality pipeline?",
+      "Where in the funnel is the most revenue being lost?"
+    ],
+    "techniques": [
+      "Win rate by stage, lead source, and deal size bucket",
+      "Average days-in-stage and stage velocity analysis",
+      "Pipeline coverage ratio: total pipeline vs quota"
+    ]
+  },
+  {
+    "name": "Patient / Clinical Outcome Analysis",
+    "domain": ["healthcare", "clinical", "pharma", "public-health"],
+    "required_column_types": ["categorical", "numeric", "datetime"],
+    "required_keywords": ["patient", "diagnosis", "treatment", "outcome", "readmission", "discharge", "clinical", "hospital"],
+    "questions": [
+      "What is the readmission rate within 30 days by diagnosis group?",
+      "Are there demographic factors associated with worse outcomes?",
+      "Which treatment protocols have the highest success rates?"
+    ],
+    "techniques": [
+      "30/60/90-day readmission rate by diagnosis and demographics",
+      "Odds ratio analysis for outcome risk factors",
+      "Length-of-stay distribution by diagnosis category"
+    ]
+  },
+  {
+    "name": "Logistics & Delivery Performance",
+    "domain": ["logistics", "supply-chain", "ecommerce", "operations"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["delivery", "shipment", "order", "fulfillment", "delay", "transit", "on-time", "carrier", "warehouse"],
+    "questions": [
+      "What percentage of deliveries arrive on time, and how does it vary by carrier?",
+      "What is the average and P95 transit time by route?",
+      "Are delays concentrated in specific warehouses or regions?"
+    ],
+    "techniques": [
+      "On-time delivery rate by carrier, region, and product category",
+      "Transit time distribution with P50/P90/P99 breakdown",
+      "Delay root cause attribution by warehouse and shipping lane"
+    ]
+  },
+  {
+    "name": "Subscription MRR / ARR Analysis",
+    "domain": ["saas", "subscription", "b2b", "finance"],
+    "required_column_types": ["numeric", "datetime"],
+    "required_keywords": ["mrr", "arr", "subscription", "plan", "tier", "upgrade", "downgrade", "expansion", "contraction", "churn"],
+    "questions": [
+      "What is the MRR breakdown: new, expansion, contraction, churn?",
+      "What is the net revenue retention (NRR) rate?",
+      "Which plan tier has the highest expansion rate?"
+    ],
+    "techniques": [
+      "MRR waterfall: new + expansion - contraction - churn",
+      "Net Revenue Retention: (MRR at end + expansion - contraction - churn) / MRR at start",
+      "Plan upgrade/downgrade transition matrix"
+    ]
+  },
+  {
+    "name": "Survey Response & Text Sentiment Analysis",
+    "domain": ["cx", "hr", "product", "research", "marketing"],
+    "required_column_types": ["text", "categorical"],
+    "required_keywords": ["survey", "feedback", "comment", "text", "response", "review", "sentiment", "opinion"],
+    "questions": [
+      "What are the most common themes in open-ended responses?",
+      "Is sentiment different across customer segments or time periods?",
+      "What topics correlate with low satisfaction scores?"
+    ],
+    "techniques": [
+      "Word frequency and bigram analysis of open-ended text",
+      "Sentiment polarity scoring (positive/negative/neutral)",
+      "Topic clustering via TF-IDF and k-means"
+    ]
+  },
+  {
+    "name": "Cost Structure & Margin Analysis",
+    "domain": ["finance", "manufacturing", "retail", "saas"],
+    "required_column_types": ["numeric"],
+    "required_keywords": ["cost", "margin", "profit", "revenue", "expense", "cogs", "gross", "net", "operating"],
+    "questions": [
+      "Which product lines or segments have the thinnest gross margins?",
+      "How has gross margin trended over time, and what drives changes?",
+      "Are there fixed costs that could be optimized given revenue level?"
+    ],
+    "techniques": [
+      "Gross margin % by product, segment, and period",
+      "Cost decomposition: variable vs fixed vs semi-variable",
+      "Break-even analysis: revenue needed to cover fixed costs"
+    ]
+  },
+  {
+    "name": "Competitive Benchmarking",
+    "domain": ["strategy", "finance", "marketing", "product"],
+    "required_column_types": ["numeric", "categorical"],
+    "required_keywords": ["competitor", "market", "share", "benchmark", "industry", "compare", "rank", "position"],
+    "questions": [
+      "How does our performance compare to peers on key metrics?",
+      "Are we gaining or losing market share relative to competitors?",
+      "On which dimensions are we a clear leader or laggard?"
+    ],
+    "techniques": [
+      "Spider/radar chart comparison across key dimensions",
+      "Market share trend analysis by period",
+      "Index comparison: our score as % of best-in-class"
+    ]
+  }
+]

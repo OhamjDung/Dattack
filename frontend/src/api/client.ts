@@ -57,23 +57,46 @@ export function createSSEStream(
   onLog: (msg: string) => void,
   onNodeAdd: (node: DattackNode, edge: DattackEdge) => void,
   onComplete: (summary: string) => void,
+  onScriptRunning?: (script: string) => void,
 ): EventSource {
   const es = new EventSource(`${BASE}/stream?session_id=${sessionId}`)
+  console.log('[SSE] connecting', sessionId)
+
+  // Kill reconnect loop — each reconnect restarts the entire pipeline
+  es.onerror = (e) => {
+    console.error('[SSE] connection error — closing to prevent reconnect loop', e)
+    es.close()
+    onLog('⚠ Stream disconnected. Refresh to retry.')
+  }
 
   es.addEventListener('log', (e) => {
     const data = JSON.parse(e.data)
+    console.log('[SSE] log:', data.message)
     onLog(data.message)
   })
 
   es.addEventListener('node_add', (e) => {
     const data = JSON.parse(e.data)
+    console.log('[SSE] node_add:', data.node?.data?.label)
     onNodeAdd(data.node, data.edge)
   })
 
   es.addEventListener('complete', (e) => {
     const data = JSON.parse(e.data)
+    console.log('[SSE] complete:', data.summary)
     onComplete(data.summary)
+    onScriptRunning?.('')
     es.close()
+  })
+
+  es.addEventListener('script_running', (e) => {
+    const data = JSON.parse(e.data)
+    console.log('[SSE] script_running:', data.script)
+    onScriptRunning?.(data.script)
+  })
+
+  es.addEventListener('script_complete', () => {
+    onScriptRunning?.('')
   })
 
   return es

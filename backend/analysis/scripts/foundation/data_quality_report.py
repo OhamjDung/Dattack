@@ -29,6 +29,17 @@ def run(ctx: AnalysisContext) -> dict:
         if len(lower_counts) < len(orig_counts):
             type_issues.append(f"'{col}' has case inconsistencies (e.g. 'Yes' vs 'yes').")
 
+    # Short-circuit: flag abort if any column is overwhelmingly null
+    critical_null_cols = [c for c, r in null_rates.items() if r > 0.85]
+    if critical_null_cols:
+        col = critical_null_cols[0]
+        pct = null_rates[col]
+        ctx.abort = True
+        ctx.abort_reason = (
+            f"Column '{col}' is {pct:.0%} null — downstream analysis would be unreliable. "
+            "Resolve the data issue and re-upload."
+        )
+
     if overall_null > 0.05:
         findings.append(f"Overall null rate is {overall_null:.1%} across all columns.")
     if high_null_cols:

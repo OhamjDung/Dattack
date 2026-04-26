@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, WheelEvent } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { DattackNode, DattackEdge } from '../types/graph'
 import { submitFeedback } from '../api/client'
 
@@ -18,10 +18,11 @@ interface Props {
   externalEdges?: DattackEdge[]
   onApprove: (nodes: DattackNode[], edges: DattackEdge[]) => void
   isAnalysis?: boolean
+  hideToolbar?: boolean
   researching?: boolean
   researchWave?: number
   researchLabel?: string
-  totalWaves?: number
+  activeScript?: string
 }
 
 export default function MapView({
@@ -31,10 +32,11 @@ export default function MapView({
   externalEdges = [],
   onApprove,
   isAnalysis = false,
+  hideToolbar = false,
   researching = false,
   researchWave = 0,
   researchLabel = '',
-  totalWaves = 3,
+  activeScript = '',
 }: Props) {
   const [nodes, setNodes] = useState<DattackNode[]>(initNodes)
   const [edges, setEdges] = useState<DattackEdge[]>(initEdges)
@@ -48,20 +50,43 @@ export default function MapView({
   const [zoom, setZoom] = useState(1.0)
   const containerRef = useRef<HTMLDivElement>(null)
   const didMove = useRef(false)
+  const [glowNodeIds, setGlowNodeIds] = useState<Set<string>>(new Set())
+  const [followMode, setFollowMode] = useState(false)
 
   // Sync initial nodes/edges when parent updates them
   useEffect(() => { setNodes(initNodes) }, [initNodes])
   useEffect(() => { setEdges(initEdges) }, [initEdges])
 
-  // Merge external nodes
+  // Merge external nodes + glow + follow mode pan
   useEffect(() => {
     if (!externalNodes.length) return
     setNodes((ns) => {
       const ids = new Set(ns.map((n) => n.id))
       const incoming = externalNodes.filter((n) => !ids.has(n.id))
-      return incoming.length ? [...ns, ...incoming] : ns
+      if (!incoming.length) return ns
+      const newIds = incoming.map((n) => n.id)
+      setGlowNodeIds((prev) => new Set([...prev, ...newIds]))
+      setTimeout(() => {
+        setGlowNodeIds((prev) => {
+          const next = new Set(prev)
+          newIds.forEach((id) => next.delete(id))
+          return next
+        })
+      }, 2500)
+      // Follow mode: pan camera to center the newest node
+      if (followMode && incoming.length > 0) {
+        const target = incoming[incoming.length - 1]
+        const cw = containerRef.current?.offsetWidth ?? 800
+        const ch = containerRef.current?.offsetHeight ?? 600
+        setPanOffset({
+          x: cw / (2 * zoom) - target.position.x - 88,
+          y: ch / (2 * zoom) - target.position.y - 38,
+        })
+        setZoom(Math.max(zoom, 0.75))
+      }
+      return [...ns, ...incoming]
     })
-  }, [externalNodes])
+  }, [externalNodes, followMode, zoom])
 
   useEffect(() => {
     if (!externalEdges.length) return
@@ -126,7 +151,7 @@ export default function MapView({
     if (!selected || !feedback.trim()) return
     setSubmitting(true)
     try {
-      const res = await submitFeedback(selected.id, feedback, deeper, nodes as any)
+      const res = await submitFeedback(selected.id, feedback, deeper, nodes)
       setNodes((ns) => {
         const updatedMap = new Map(res.updated_nodes.map((n) => [n.id, n]))
         const merged = ns.map((n) => updatedMap.has(n.id) ? { ...n, ...updatedMap.get(n.id)! } : n)
@@ -151,13 +176,14 @@ export default function MapView({
   }
 
   const cursorStyle = panning ? 'grabbing' : dragging ? 'grabbing' : 'grab'
+  const showToolbar = !isAnalysis && !hideToolbar
   const canvasWidth = isAnalysis ? 'calc(100% - 320px)' : '100%'
-  const canvasHeight = isAnalysis ? 'calc(100vh - 64px)' : 'calc(100vh - 64px - 46px)'
+  const canvasHeight = (isAnalysis || hideToolbar) ? 'calc(100vh - 64px)' : 'calc(100vh - 64px - 46px)'
 
   return (
-    <div style={{ paddingTop: 64 }}>
+    <div style={{ paddingTop: hideToolbar ? 0 : 64 }}>
       {/* Toolbar */}
-      {!isAnalysis && (
+      {showToolbar && (
         <div style={{
           padding: '10px 32px',
           borderBottom: '1px solid var(--line)',
@@ -203,7 +229,7 @@ export default function MapView({
         onMouseDown={handleCanvasMouseDown}
         onWheel={handleWheel}
       >
-        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: '100%', height: '100%' }}>
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 5000, height: 5000 }}>
         {/* SVG Edges */}
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
           {edges.map((edge) => {
@@ -228,11 +254,22 @@ export default function MapView({
         {nodes.map((node) => {
           const nc = NODE_COLORS[node.data.type] || NODE_COLORS.goal
           const isSelected = selected?.id === node.id
+          const isLowConf = node.data.status === 'low_confidence'
+          const isGlowing = glowNodeIds.has(node.id)
           return (
             <div
               key={node.id}
               className={`node-card${isSelected ? ' selected' : ''}`}
-              style={{ left: node.position.x + panOffset.x, top: node.position.y + panOffset.y }}
+              style={{
+                left: node.position.x + panOffset.x,
+                top: node.position.y + panOffset.y,
+                opacity: isLowConf ? 0.4 : 1,
+                filter: isLowConf ? 'grayscale(0.6)' : 'none',
+                boxShadow: isGlowing
+                  ? '0 0 0 2px #3B82F6, 0 0 24px rgba(59,130,246,0.5), 0 8px 0 rgba(0,0,0,0.25)'
+                  : undefined,
+                transition: 'box-shadow 0.4s ease',
+              }}
               onMouseDown={(e) => handleNodeMouseDown(e, node)}
               onClick={(e) => handleNodeClick(e, node)}
             >
@@ -241,6 +278,11 @@ export default function MapView({
                 <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: nc.bg }}>
                   {nc.label}
                 </div>
+                {isLowConf && (
+                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#9a8f85', marginLeft: 'auto' }}>
+                    low confidence
+                  </div>
+                )}
               </div>
               <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.3, color: '#1a1612' }}>{node.data.label}</div>
               <div style={{ fontSize: 12, color: '#6a6560', marginTop: 4, lineHeight: 1.5, fontWeight: 500 }}>{node.data.description}</div>
@@ -254,6 +296,30 @@ export default function MapView({
         })}
 
         </div>{/* end scale wrapper */}
+
+        {/* Active script overlay */}
+        {activeScript && (
+          <div style={{
+            position: 'absolute', bottom: researching && researchLabel ? 70 : 20, left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(15,23,42,0.92)',
+            border: '1px solid rgba(59,130,246,0.5)',
+            color: '#fff',
+            padding: '8px 18px', borderRadius: 999,
+            display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 0 12px rgba(59,130,246,0.3), 0 8px 0 rgba(0,0,0,0.3)',
+            zIndex: 100, whiteSpace: 'nowrap',
+          }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: '#3B82F6',
+              boxShadow: '0 0 8px #3B82F6',
+              animation: 'pulse 1s ease-in-out infinite',
+            }} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(147,197,253,1)' }}>Running</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontFamily: 'monospace' }}>{activeScript}</span>
+          </div>
+        )}
 
         {/* Research running overlay */}
         {researching && researchLabel && (
