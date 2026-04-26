@@ -180,3 +180,118 @@
      4. Click question node → answer it → question node turns green, "Approve" button enables
      5. Click "Approve" → analysis panel opens, log streams 3 lines, 2 finding nodes animate onto map
      6. Viz panel appears with placeholder charts
+
+
+
+
+
+       during (2)                                                           
+                                                                       
+  do we have an AI loop where the AI investigates until there is       
+  nothing "left" to investigate? We're using all of the scripts we     
+  built here right?                                                    
+                                                                       
+  we can have Exploratory Scripts (50 Scripts) for (2) and Analysis    
+  Scripts (50 scripts) for (5)                                         
+                                                                       
+  basically, for (2), the goal is to have questions that we need to    
+  answer, basically explore to get a plan                              
+                                                                       
+       4. User approves the map                                        
+                                                                       
+       5. AI Analysis (live streaming log)                             
+          ├─ SSE stream shows AI reasoning steps in real time          
+          ├─ Finding nodes animate onto the map as discoveries happen  
+          └─ Patterns, correlations, anomalies, trends                 
+                                                                       
+       6. Interactive Visualizations                                   
+          └─ Charts rendered in-app from analysis findings             
+                                                                       
+                                                                       
+  so this flow is working?                                             
+                                                                       
+  during (2)                                                           
+                                                                       
+  do we have an AI loop where the AI investigates until there is       
+  nothing "left" to investigate? We're using all of the scripts we     
+  built here right?                                                    
+                                                                       
+  we can have Exploratory Scripts (50 Scripts) for (2) and Analysis    
+  Scripts (50 scripts) for (5)                                         
+                                                                       
+  basically, for (2), the goal is to have questions that we need to    
+  answer, basically explore to get a plan                              
+                                                                       
+  and we have the user (3) to fine tune that plan and add THEIR        
+  questions                                                            
+                                                                       
+  so basically, have the AI be curious in (2)                          
+                                                                       
+  and then (5) is when it executes that plan                           
+                                                                       
+  also remember that you can make "modular" scripts too, or have       
+  scripts modules that can be chained together to make bigger scripts  
+
+● What's actually working right now:               
+  - Phase 1 ✓ (context form → /context → initial map)                
+  - Phase 3 ✓ (node click → feedback → map updates)                    
+  - Phase 4 ✓ (approve → session stored)
+  - Phase 5 ✓ (SSE pipeline + Gemini synthesis + finding nodes animate)
+  - Phase 2 ✗ no research loop — single Gemini call builds map,      
+  /research exists but nothing calls it                                
+  - Phase 6 ✗ placeholder only                                       
+                                               
+  ---                                                                
+  Your vision is solid. Here's what it implies architecturally:
+
+  Phase 2 — Exploratory Scripts (curiosity loop)
+
+  Goal isn't findings — it's generating questions and a plan. Scripts
+  should output things like:
+  - "target column is ambiguous — 3 candidates"
+  - "date column detected but granularity unclear (day vs week?)"
+  - "high cardinality in customer_id — could be entity or transaction
+  data"
+
+  Each output → Gemini reads it → adds question or technique nodes to
+  map → loop repeats until no new questions surface. User answers
+  inline → /research called again with updated answers → loop.
+
+  Phase 5 — Analysis Scripts (execution)
+
+  Current pipeline is already this. Runs the approved plan, produces
+  findings, streams them as nodes.
+
+  ---
+  Proposed split:
+
+  analysis/
+    exploratory_scripts/   ← phase 2: fast, question-generating
+      foundation/          ← schema, profile, quality (shared with
+  phase 5)
+      structure/           ← ambiguity detectors, entity-type guesser
+      relationships/       ← what connects to what, what's missing
+      hypotheses/          ← generates candidate analyses to run
+
+    analysis_scripts/      ← phase 5: current scripts, produces
+  findings
+      exploratory/
+      time_series/
+      ranking/
+      business/
+      text/
+      anomaly/
+
+  Modular/chainable scripts — already works via DEPENDENCIES. Could
+  formalize "composite" scripts that just chain sub-scripts and
+  aggregate their outputs, no new infra needed.
+
+  ---
+  The key design question before building: Does the phase 2 loop run
+  scripts on the CSV directly, or does Gemini drive the curiosity
+  purely from the foundation summary? If CSV is available, scripts can
+  be concrete ("27% nulls in revenue — what should we do?"). If no CSV
+  yet, it's pure Gemini speculation.
+
+  What's the expected state at phase 2 — CSV always uploaded, or
+  optional?

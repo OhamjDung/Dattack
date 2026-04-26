@@ -8,7 +8,8 @@ import type { ContextRequest, DattackNode, DattackEdge } from './types/graph'
 
 type Phase = 'context' | 'map' | 'analysis' | 'viz'
 
-const MAX_RESEARCH_ITERATIONS = 3
+const MAX_RESEARCH_ROUNDS = 8
+const MIN_RESEARCH_ROUNDS = 2
 
 const PHASE_LABELS: Record<Phase, string> = {
   context: '01 Context',
@@ -94,9 +95,9 @@ export default function App() {
     let nodes = initialNodes
     let edges = initialEdges
 
-    for (let i = 0; i < MAX_RESEARCH_ITERATIONS; i++) {
+    for (let i = 0; i < MAX_RESEARCH_ROUNDS; i++) {
       setResearchWave(i + 1)
-      setResearchLabel(`research wave ${i + 1}/${MAX_RESEARCH_ITERATIONS}`)
+      setResearchLabel(`research wave ${i + 1}`)
       try {
         const res = await runResearch(pid, [...nodes, ...researchNodes])
         if (!res.new_nodes.length) break
@@ -104,6 +105,7 @@ export default function App() {
         edges = mergeEdges(edges, res.new_edges)
         setResearchNodes(ns => mergeNodes(ns, res.new_nodes))
         setResearchEdges(es => mergeEdges(es, res.new_edges))
+        if (!res.has_more && i >= MIN_RESEARCH_ROUNDS - 1) break
       } catch {
         break
       }
@@ -173,7 +175,7 @@ export default function App() {
           researching={researching}
           researchWave={researchWave}
           researchLabel={researchLabel}
-          totalWaves={MAX_RESEARCH_ITERATIONS}
+          totalWaves={MAX_RESEARCH_ROUNDS}
         />
       )}
       {phase === 'analysis' && (

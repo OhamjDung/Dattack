@@ -31,7 +31,7 @@ export async function submitContext(
 export async function runResearch(
   pendingSessionId: string,
   nodes: DattackNode[],
-): Promise<{ new_nodes: DattackNode[]; new_edges: DattackEdge[] }> {
+): Promise<{ new_nodes: DattackNode[]; new_edges: DattackEdge[]; has_more: boolean }> {
   return post('/research', { session_id: pendingSessionId, nodes })
 }
 

@@ -1,4 +1,4 @@
-export type NodeType = 'goal' | 'data_source' | 'technique' | 'question' | 'finding'
+export type NodeType = 'goal' | 'data_source' | 'technique' | 'question' | 'finding' | 'insight'
 export type NodeStatus = 'pending' | 'active' | 'answered' | 'complete'
 
 export interface NodeData {

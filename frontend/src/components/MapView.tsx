@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, WheelEvent } from 'react'
 import type { DattackNode, DattackEdge } from '../types/graph'
 import { submitFeedback } from '../api/client'
 
@@ -8,6 +8,7 @@ const NODE_COLORS: Record<string, { bg: string; fg: string; label: string }> = {
   technique:   { bg: '#6B21A8', fg: '#fff', label: 'Technique' },
   question:    { bg: '#B45309', fg: '#fff', label: 'Question' },
   finding:     { bg: '#065F46', fg: '#fff', label: 'Finding' },
+  insight:     { bg: '#0E7490', fg: '#fff', label: 'Insight' },
 }
 
 interface Props {
@@ -44,6 +45,7 @@ export default function MapView({
   const [dragging, setDragging] = useState<{ id: string; startX: number; startY: number } | null>(null)
   const [panning, setPanning] = useState<{ startX: number; startY: number } | null>(null)
   const [panOffset, setPanOffset] = useState({ x: 60, y: 40 })
+  const [zoom, setZoom] = useState(1.0)
   const containerRef = useRef<HTMLDivElement>(null)
   const didMove = useRef(false)
 
@@ -70,7 +72,10 @@ export default function MapView({
     })
   }, [externalEdges])
 
-  const hasOpenQ = nodes.some((n) => n.data.type === 'question' && n.data.status !== 'answered')
+  function handleWheel(e: React.WheelEvent) {
+    e.preventDefault()
+    setZoom(z => Math.min(3.0, Math.max(0.25, z - e.deltaY * 0.001)))
+  }
 
   function handleNodeMouseDown(e: React.MouseEvent, node: DattackNode) {
     e.stopPropagation()
@@ -80,7 +85,7 @@ export default function MapView({
 
   function handleCanvasMouseDown(e: React.MouseEvent) {
     const tgt = e.target as HTMLElement
-    if (tgt !== containerRef.current && !tgt.closest('svg')) return
+    if (tgt.closest('.node-card') || tgt.closest('.feedback-popup')) return
     didMove.current = false
     setPanning({ startX: e.clientX - panOffset.x, startY: e.clientY - panOffset.y })
   }
@@ -159,26 +164,34 @@ export default function MapView({
           display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
           height: 46,
         }}>
-          {researching ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div className="pulse-dot" />
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--orange)' }}>
-                Researching…
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--gray)', fontWeight: 500 }}>
-                Wave {researchWave}/{totalWaves}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {/* Zoom controls */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => setZoom(z => Math.max(0.25, z - 0.1))} style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 4, width: 24, height: 24, cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--gray)', minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(3.0, z + 0.1))} style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 4, width: 24, height: 24, cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+              <button onClick={() => setZoom(1)} style={{ background: 'none', border: '1px solid var(--line)', borderRadius: 4, padding: '0 6px', height: 24, cursor: 'pointer', fontSize: 9, fontWeight: 700, letterSpacing: '1px', color: 'var(--gray)' }}>RESET</button>
             </div>
-          ) : (
-            <button
-              className="btn-primary"
-              onClick={() => onApprove(nodes, edges)}
-              disabled={hasOpenQ}
-              style={{ padding: '10px 24px', fontSize: 12 }}
-            >
-              Approve Map →
-            </button>
-          )}
+            {researching ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div className="pulse-dot" />
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'var(--orange)' }}>
+                  Researching…
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--gray)', fontWeight: 500 }}>
+                  Wave {researchWave}
+                </span>
+              </div>
+            ) : (
+              <button
+                className="btn-primary"
+                onClick={() => onApprove(nodes, edges)}
+                style={{ padding: '10px 24px', fontSize: 12 }}
+              >
+                Approve Map →
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -188,7 +201,9 @@ export default function MapView({
         style={{ position: 'relative', width: canvasWidth, height: canvasHeight, overflow: 'hidden', cursor: cursorStyle }}
         onClick={() => { if (!didMove.current) setSelected(null) }}
         onMouseDown={handleCanvasMouseDown}
+        onWheel={handleWheel}
       >
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: '100%', height: '100%' }}>
         {/* SVG Edges */}
         <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
           {edges.map((edge) => {
@@ -229,16 +244,6 @@ export default function MapView({
               </div>
               <div style={{ fontSize: 13, fontWeight: 800, lineHeight: 1.3, color: '#1a1612' }}>{node.data.label}</div>
               <div style={{ fontSize: 12, color: '#6a6560', marginTop: 4, lineHeight: 1.5, fontWeight: 500 }}>{node.data.description}</div>
-              {node.data.type === 'question' && (
-                <div style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase',
-                  marginTop: 6, display: 'inline-block', padding: '2px 6px',
-                  background: node.data.status === 'answered' ? '#065F46' : '#B45309',
-                  color: '#fff',
-                }}>
-                  {node.data.status === 'answered' ? '✓ Answered' : '● Open'}
-                </div>
-              )}
               {node.data.type === 'finding' && (
                 <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', marginTop: 6, display: 'inline-block', padding: '2px 6px', background: '#065F46', color: '#fff' }}>
                   ✓ Finding
@@ -247,6 +252,8 @@ export default function MapView({
             </div>
           )
         })}
+
+        </div>{/* end scale wrapper */}
 
         {/* Research running overlay */}
         {researching && researchLabel && (

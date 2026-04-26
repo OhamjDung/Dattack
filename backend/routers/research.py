@@ -12,7 +12,7 @@ from services import session_store
 
 router = APIRouter()
 
-MAX_ITERATIONS = 3
+MAX_ITERATIONS = 8
 
 
 @router.post("/research", response_model=ResearchResponse)
@@ -28,7 +28,7 @@ async def run_research(body: ResearchRequest):
         iteration = session_data.get("research_iteration", 1)
 
         if iteration > MAX_ITERATIONS:
-            return ResearchResponse(new_nodes=[], new_edges=[])
+            return ResearchResponse(new_nodes=[], new_edges=[], has_more=False)
 
         if csv_bytes:
             try:
@@ -42,8 +42,8 @@ async def run_research(body: ResearchRequest):
 
         session_store.update(f"pending_{body.session_id}", {"research_iteration": iteration + 1})
 
-    new_nodes, new_edges = generate_research_nodes(
+    new_nodes, new_edges, has_more = generate_research_nodes(
         body.nodes, goal, curiosity_outputs, iteration
     )
 
-    return ResearchResponse(new_nodes=new_nodes, new_edges=new_edges)
+    return ResearchResponse(new_nodes=new_nodes, new_edges=new_edges, has_more=has_more)

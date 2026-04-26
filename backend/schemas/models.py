@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from typing import Any, Literal, Optional
 
 
-NodeType = Literal["goal", "data_source", "technique", "question", "finding"]
+NodeType = Literal["goal", "data_source", "technique", "question", "finding", "insight"]
 NodeStatus = Literal["pending", "active", "answered", "complete"]
 
 
@@ -67,6 +67,7 @@ class ContextResponse(BaseModel):
 class ResearchResponse(BaseModel):
     new_nodes: list[Node]
     new_edges: list[Edge]
+    has_more: bool = False
 
 
 class FeedbackResponse(BaseModel):

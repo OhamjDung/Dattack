@@ -3,7 +3,7 @@ uvicorn[standard]
 sse-starlette
 python-multipart
 python-dotenv
-google-genai
+openai
 pandas
 numpy
 scipy
