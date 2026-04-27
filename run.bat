@@ -1,6 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "PY_CMD=py"
+where py >nul 2>nul || set "PY_CMD=python"
+
 REM Load .env file if exists
 if exist "backend\.env" (
   for /f "usebackq tokens=1,* delims==" %%A in (`findstr /v "^#" backend\.env`) do (
@@ -11,7 +14,7 @@ if exist "backend\.env" (
 
 echo Installing backend deps...
 cd backend
-pip install -q -r requirements.txt
+%PY_CMD% -m pip install -q -r requirements.txt
 cd ..
 
 echo Installing frontend deps...
@@ -21,7 +24,7 @@ cd ..
 
 echo Starting backend...
 cd backend
-start "Dattack Backend" cmd /k "uvicorn main:app --reload --port 8000"
+start "Dattack Backend" cmd /k "%PY_CMD% -m uvicorn main:app --reload --port 8000"
 cd ..
 
 echo Starting frontend...

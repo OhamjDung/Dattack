@@ -149,8 +149,15 @@ async def run_and_stream(session_data: dict[str, Any]) -> AsyncGenerator[dict, N
             yield {"event": "log", "data": json.dumps({"message": str(event.get("message", ""))})}
 
     # Pipeline done — stream Gemini synthesis
-    async for sse_event in stream_synthesis(ctx):
-        yield sse_event
+    try:
+        async for sse_event in stream_synthesis(ctx):
+            yield sse_event
+    except Exception as e:
+        import traceback
+        err = traceback.format_exc(limit=3)
+        print(f"[SSE] synthesis error: {err[:300]}", flush=True)
+        yield {"event": "log", "data": json.dumps({"message": f"⚠ Synthesis error: {type(e).__name__}: {str(e)[:120]}"})}
+        yield {"event": "complete", "data": json.dumps({"summary": "Analysis scripts completed. Synthesis failed — check logs."})}
 
 
 async def _run_pipeline_task(ctx: AnalysisContext, queue: asyncio.Queue) -> None:

@@ -39,8 +39,8 @@ Dattack sits in the middle:
 From [backend](backend):
 
 ```bash
-pip install -r requirements.txt
-uvicorn main:app --reload
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --reload
 ```
 
 Create [backend/.env](backend/.env):
