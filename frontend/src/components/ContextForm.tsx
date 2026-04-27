@@ -9,6 +9,7 @@ interface Props {
 export default function ContextForm({ onSubmit, loading }: Props) {
   const [form, setForm] = useState<ContextRequest>({ goal: '', why: '', available_data: '', ideas: '' })
   const [file, setFile] = useState<File | null>(null)
+  const [expanded, setExpanded] = useState(false)
   const set = (k: keyof ContextRequest) => (e: React.ChangeEvent<HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -28,34 +29,59 @@ export default function ContextForm({ onSubmit, loading }: Props) {
               <textarea rows={3} value={form.goal} onChange={set('goal')} required
                 placeholder="e.g. Understand why revenue dropped in Q3" />
             </div>
-            <div className="form-field">
-              <label>Why this matters</label>
-              <textarea rows={2} value={form.why} onChange={set('why')}
-                placeholder="e.g. Board presentation next week" />
-            </div>
-            <div className="form-field">
-              <label>Upload Dataset <span style={{ color: 'var(--gray2)', fontWeight: 400 }}>(CSV / TSV)</span></label>
-              <label className={`file-zone${file ? ' has-file' : ''}`}>
-                <input type="file" accept=".csv,.tsv" style={{ display: 'none' }}
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M8 1v10M4 5l4-4 4 4M2 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-                {file
-                  ? <span style={{ fontWeight: 600 }}>{file.name} — {(file.size / 1024).toFixed(0)} KB</span>
-                  : <span>Click to upload</span>}
-              </label>
-            </div>
-            <div className="form-field">
-              <label>Describe your data</label>
-              <textarea rows={2} value={form.available_data} onChange={set('available_data')}
-                placeholder="e.g. Sales CSV, Jan–Dec 2024" />
-            </div>
-            <div className="form-field">
-              <label>Ideas or techniques</label>
-              <textarea rows={2} value={form.ideas} onChange={set('ideas')}
-                placeholder="e.g. Cohort analysis, churn regression" />
-            </div>
+
+            <button
+              type="button"
+              onClick={() => setExpanded(e => !e)}
+              style={{
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 12, fontWeight: 600, color: 'var(--gray)',
+                letterSpacing: '0.5px', textTransform: 'uppercase', alignSelf: 'flex-start',
+              }}
+            >
+              <svg
+                width="12" height="12" viewBox="0 0 12 12" fill="none"
+                style={{ transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+              >
+                <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Add more context (optional)
+            </button>
+
+            {expanded && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div className="form-field">
+                  <label>Why this matters</label>
+                  <textarea rows={2} value={form.why} onChange={set('why')}
+                    placeholder="e.g. Board presentation next week" />
+                </div>
+                <div className="form-field">
+                  <label>Upload Dataset <span style={{ color: 'var(--gray2)', fontWeight: 400 }}>(CSV / TSV)</span></label>
+                  <label className={`file-zone${file ? ' has-file' : ''}`}>
+                    <input type="file" accept=".csv,.tsv" style={{ display: 'none' }}
+                      onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 1v10M4 5l4-4 4 4M2 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    {file
+                      ? <span style={{ fontWeight: 600 }}>{file.name} — {(file.size / 1024).toFixed(0)} KB</span>
+                      : <span>Click to upload</span>}
+                  </label>
+                </div>
+                <div className="form-field">
+                  <label>Describe your data</label>
+                  <textarea rows={2} value={form.available_data} onChange={set('available_data')}
+                    placeholder="e.g. Sales CSV, Jan–Dec 2024" />
+                </div>
+                <div className="form-field">
+                  <label>Ideas or techniques</label>
+                  <textarea rows={2} value={form.ideas} onChange={set('ideas')}
+                    placeholder="e.g. Cohort analysis, churn regression" />
+                </div>
+              </div>
+            )}
+
             <button type="submit" className="btn-primary" disabled={loading || !form.goal.trim()}>
               {loading ? 'Building map…' : <>Start Research <span style={{ marginLeft: 4 }}>→</span></>}
             </button>
