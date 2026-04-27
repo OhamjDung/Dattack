@@ -25,7 +25,16 @@ function mergeNodes(existing: DattackNode[], incoming: DattackNode[]): DattackNo
 
 function mergeEdges(existing: DattackEdge[], incoming: DattackEdge[]): DattackEdge[] {
   const ids = new Set(existing.map((e) => e.id))
-  return [...existing, ...incoming.filter((e) => !ids.has(e.id))]
+  let counter = 0
+  return [
+    ...existing,
+    ...incoming.map((e) => {
+      if (!ids.has(e.id)) { ids.add(e.id); return e }
+      const unique = `${e.id}-${++counter}`
+      ids.add(unique)
+      return { ...e, id: unique }
+    }),
+  ]
 }
 
 function Nav({ phase, onPhaseClick }: { phase: Phase; onPhaseClick?: (p: Phase) => void }) {

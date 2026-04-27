@@ -52,6 +52,8 @@ export default function MapView({
   const didMove = useRef(false)
   const [glowNodeIds, setGlowNodeIds] = useState<Set<string>>(new Set())
   const [followMode, setFollowMode] = useState(false)
+  const minimapRef = useRef<HTMLCanvasElement>(null)
+  const minimapXform = useRef({ minX: 0, minY: 0, scale: 1, offX: 0, offY: 0 })
 
   // Sync initial nodes/edges when parent updates them
   useEffect(() => { setNodes(initNodes) }, [initNodes])
@@ -97,10 +99,16 @@ export default function MapView({
     })
   }, [externalEdges])
 
-  function handleWheel(e: React.WheelEvent) {
-    e.preventDefault()
-    setZoom(z => Math.min(3.0, Math.max(0.25, z - e.deltaY * 0.001)))
-  }
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handler = (e: WheelEvent) => {
+      e.preventDefault()
+      setZoom(z => Math.min(3.0, Math.max(0.25, z - e.deltaY * 0.001)))
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [])
 
   function handleNodeMouseDown(e: React.MouseEvent, node: DattackNode) {
     e.stopPropagation()
@@ -137,6 +145,94 @@ export default function MapView({
     window.addEventListener('mouseup', onUp)
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
   }, [onMove, onUp])
+
+  // Minimap draw
+  useEffect(() => {
+    const canvas = minimapRef.current
+    const container = containerRef.current
+    if (!canvas || nodes.length === 0) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const MW = canvas.width   // 180
+    const MH = canvas.height  // 108
+
+    const xs = nodes.map(n => n.position.x)
+    const ys = nodes.map(n => n.position.y)
+    const rawMinX = Math.min(...xs) - 40
+    const rawMinY = Math.min(...ys) - 40
+    const rawMaxX = Math.max(...xs) + 216
+    const rawMaxY = Math.max(...ys) + 120
+
+    const scaleX = MW / (rawMaxX - rawMinX)
+    const scaleY = MH / (rawMaxY - rawMinY)
+    const sc = Math.min(scaleX, scaleY, 0.06)
+    const contentW = (rawMaxX - rawMinX) * sc
+    const contentH = (rawMaxY - rawMinY) * sc
+    const offX = (MW - contentW) / 2
+    const offY = (MH - contentH) / 2
+
+    minimapXform.current = { minX: rawMinX, minY: rawMinY, scale: sc, offX, offY }
+
+    ctx.clearRect(0, 0, MW, MH)
+
+    // BG
+    ctx.fillStyle = 'rgba(10,8,6,0.88)'
+    ctx.fillRect(0, 0, MW, MH)
+
+    // Edges
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'
+    ctx.lineWidth = 0.5
+    edges.forEach(edge => {
+      const src = nodes.find(n => n.id === edge.source)
+      const tgt = nodes.find(n => n.id === edge.target)
+      if (!src || !tgt) return
+      ctx.beginPath()
+      ctx.moveTo(offX + (src.position.x + 88 - rawMinX) * sc, offY + (src.position.y + 38 - rawMinY) * sc)
+      ctx.lineTo(offX + (tgt.position.x + 88 - rawMinX) * sc, offY + (tgt.position.y + 38 - rawMinY) * sc)
+      ctx.stroke()
+    })
+
+    // Nodes as dots
+    nodes.forEach(node => {
+      const nx = offX + (node.position.x + 88 - rawMinX) * sc
+      const ny = offY + (node.position.y + 38 - rawMinY) * sc
+      const color = NODE_COLORS[node.data.type]?.bg ?? '#888'
+      ctx.fillStyle = node.data.status === 'low_confidence' ? 'rgba(120,110,100,0.5)' : color
+      ctx.beginPath()
+      ctx.arc(nx, ny, node.data.type === 'goal' ? 4 : 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    })
+
+    // Viewport rect
+    if (container) {
+      const vpX = offX + (-panOffset.x - rawMinX) * sc
+      const vpY = offY + (-panOffset.y - rawMinY) * sc
+      const vpW = (container.offsetWidth / zoom) * sc
+      const vpH = (container.offsetHeight / zoom) * sc
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'
+      ctx.fillRect(vpX, vpY, vpW, vpH)
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(vpX, vpY, vpW, vpH)
+    }
+  }, [nodes, edges, panOffset, zoom])
+
+  function handleMinimapClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    const canvas = minimapRef.current
+    const container = containerRef.current
+    if (!canvas || !container) return
+    const rect = canvas.getBoundingClientRect()
+    const mx = e.clientX - rect.left
+    const my = e.clientY - rect.top
+    const { minX, minY, scale: sc, offX, offY } = minimapXform.current
+    const nodeX = (mx - offX) / sc + minX
+    const nodeY = (my - offY) / sc + minY
+    setPanOffset({
+      x: container.offsetWidth / (2 * zoom) - nodeX,
+      y: container.offsetHeight / (2 * zoom) - nodeY,
+    })
+  }
 
   function handleNodeClick(e: React.MouseEvent, node: DattackNode) {
     if (didMove.current) return
@@ -227,7 +323,6 @@ export default function MapView({
         style={{ position: 'relative', width: canvasWidth, height: canvasHeight, overflow: 'hidden', cursor: cursorStyle }}
         onClick={() => { if (!didMove.current) setSelected(null) }}
         onMouseDown={handleCanvasMouseDown}
-        onWheel={handleWheel}
       >
         <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 5000, height: 5000 }}>
         {/* SVG Edges */}
@@ -296,6 +391,34 @@ export default function MapView({
         })}
 
         </div>{/* end scale wrapper */}
+
+        {/* Follow mode toggle — visible in analysis mode */}
+        {isAnalysis && (
+          <button
+            onClick={() => setFollowMode(f => !f)}
+            style={{
+              position: 'absolute', top: 14, right: 16, zIndex: 101,
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: followMode ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.08)',
+              border: `1px solid ${followMode ? 'rgba(59,130,246,0.6)' : 'rgba(255,255,255,0.12)'}`,
+              borderRadius: 999,
+              padding: '6px 14px',
+              cursor: 'pointer',
+              color: followMode ? 'rgba(147,197,253,1)' : 'rgba(255,255,255,0.45)',
+              fontSize: 10, fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
+              fontFamily: 'var(--font-body)',
+              boxShadow: followMode ? '0 0 12px rgba(59,130,246,0.3)' : 'none',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: followMode ? '#3B82F6' : 'rgba(255,255,255,0.3)',
+              boxShadow: followMode ? '0 0 6px #3B82F6' : 'none',
+            }} />
+            {followMode ? 'Following' : 'Follow'}
+          </button>
+        )}
 
         {/* Active script overlay */}
         {activeScript && (
@@ -385,6 +508,34 @@ export default function MapView({
                 }}
               >Deep Research</button>
             </div>
+          </div>
+        )}
+
+        {/* Minimap */}
+        {nodes.length > 0 && (
+          <div style={{
+            position: 'fixed', bottom: 24, left: 24, zIndex: 999,
+            borderRadius: 6,
+            overflow: 'hidden',
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{
+              background: 'rgba(10,8,6,0.88)',
+              padding: '4px 8px',
+              fontSize: 8, fontWeight: 800, letterSpacing: '2px',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)',
+              borderBottom: '1px solid rgba(255,255,255,0.07)',
+            }}>
+              Map
+            </div>
+            <canvas
+              ref={minimapRef}
+              width={180}
+              height={108}
+              style={{ display: 'block', cursor: 'crosshair', background: 'rgba(10,8,6,0.88)' }}
+              onClick={handleMinimapClick}
+            />
           </div>
         )}
       </div>

@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import os
 from typing import AsyncGenerator, Any
 
 import pandas as pd
@@ -11,10 +12,79 @@ from analysis.runner import run_pipeline
 from services.gemini_service import stream_synthesis
 
 
+def _is_mock_mode() -> bool:
+    return os.environ.get("MOCK_MODE", "").strip().lower() in ("1", "true", "yes")
+
+
+async def _stream_mock_analysis(goal: str) -> AsyncGenerator[dict, None]:
+    mock_goal = goal or "Mock analysis goal"
+
+    yield {"event": "log", "data": json.dumps({"message": "MOCK_MODE is enabled: bypassing analysis pipeline."})}
+    yield {"event": "log", "data": json.dumps({"message": f"Goal: {mock_goal}"})}
+
+    findings = [
+        (
+            "Top Segment Leads",
+            "Mock result: Enterprise segment contributes 44% of total revenue while representing 18% of customers.",
+            0.93,
+        ),
+        (
+            "Seasonal Spike",
+            "Mock result: Revenue peaks in Q4 at 1.6x the annual monthly average.",
+            0.89,
+        ),
+        (
+            "Concentration Risk",
+            "Mock result: Top 10 accounts generate 58% of revenue, indicating moderate concentration exposure.",
+            0.87,
+        ),
+    ]
+
+    for index, (label, description, confidence) in enumerate(findings):
+        node_id = f"finding-{index}"
+        node = {
+            "id": node_id,
+            "type": "findingNode",
+            "position": {"x": 780, "y": 120 + (index + 1) * 190},
+            "data": {
+                "label": label,
+                "description": description,
+                "type": "finding",
+                "status": "complete",
+                "metadata": {"confidence": confidence, "source": "mock_stream"},
+            },
+        }
+        edge = {
+            "id": f"e-goal-{node_id}",
+            "source": "goal-1",
+            "target": node_id,
+            "animated": True,
+        }
+        yield {"event": "node_add", "data": json.dumps({"node": node, "edge": edge})}
+        await asyncio.sleep(0.05)
+
+    yield {
+        "event": "complete",
+        "data": json.dumps(
+            {
+                "summary": (
+                    "Mock analysis complete. Findings were generated without running foundation or module scripts. "
+                    "Disable MOCK_MODE to execute the full analysis pipeline."
+                )
+            }
+        ),
+    }
+
+
 async def run_and_stream(session_data: dict[str, Any]) -> AsyncGenerator[dict, None]:
     csv_bytes: bytes = session_data.get("csv_bytes", b"")
     goal: str = session_data.get("goal", "")
     target_col: str | None = session_data.get("target_col")
+
+    if _is_mock_mode():
+        async for event in _stream_mock_analysis(goal):
+            yield event
+        return
 
     if not csv_bytes:
         yield {"event": "error", "data": json.dumps({"message": "No CSV data found in session."})}
