@@ -3,7 +3,7 @@ from typing import Any, Literal, Optional
 
 
 NodeType = Literal["goal", "data_source", "technique", "question", "finding", "insight"]
-NodeStatus = Literal["pending", "active", "answered", "complete"]
+NodeStatus = Literal["pending", "active", "answered", "complete", "low_confidence"]
 
 
 class NodeData(BaseModel):
