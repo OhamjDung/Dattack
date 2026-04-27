@@ -99,5 +99,14 @@ export function createSSEStream(
     onScriptRunning?.('')
   })
 
+  es.addEventListener('error', (e: MessageEvent) => {
+    try {
+      const data = JSON.parse(e.data)
+      console.error('[SSE] error event:', data.message)
+      onLog(`⚠ ${data.message}`)
+    } catch { /* connection-level error, onerror handles it */ }
+    es.close()
+  })
+
   return es
 }

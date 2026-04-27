@@ -51,7 +51,7 @@ export default function MapView({
   const containerRef = useRef<HTMLDivElement>(null)
   const didMove = useRef(false)
   const [glowNodeIds, setGlowNodeIds] = useState<Set<string>>(new Set())
-  const [followMode, setFollowMode] = useState(false)
+  const [followMode, setFollowMode] = useState(isAnalysis)
   const minimapRef = useRef<HTMLCanvasElement>(null)
   const minimapXform = useRef({ minX: 0, minY: 0, scale: 1, offX: 0, offY: 0 })
 

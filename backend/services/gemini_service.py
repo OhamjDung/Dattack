@@ -181,6 +181,58 @@ def _position(node_type: str, index: int) -> NodePosition:
     return NodePosition(x=bx, y=80 + index * 240)
 
 
+def _layout_min_crossings(nodes: list[Node], edges: list[Edge], start_y: int = 80) -> list[Node]:
+    """Re-position technique+question nodes so each technique's questions are in the same
+    vertical band, eliminating edge crossings between unrelated technique-question pairs."""
+    techniques = [n for n in nodes if n.data.type == "technique"]
+    questions = {n.id: n for n in nodes if n.data.type == "question"}
+    tech_ids = {t.id for t in techniques}
+
+    # Build technique → [question_id] map from edges
+    tech_qs: dict[str, list[str]] = {t.id: [] for t in techniques}
+    claimed: set[str] = set()
+    for e in edges:
+        if e.source in tech_ids and e.target in questions and e.target not in claimed:
+            tech_qs[e.source].append(e.target)
+            claimed.add(e.target)
+        elif e.target in tech_ids and e.source in questions and e.source not in claimed:
+            tech_qs[e.target].append(e.source)
+            claimed.add(e.source)
+
+    orphan_qs = [qid for qid in questions if qid not in claimed]
+
+    # Sort techniques by existing y (preserve LLM's relative ordering intent)
+    techniques = sorted(techniques, key=lambda n: n.position.y)
+
+    Q_GAP = 220   # vertical gap between sibling questions
+    GRP_GAP = 80  # extra gap between technique groups
+
+    new_pos: dict[str, NodePosition] = {}
+    cy = start_y
+
+    for tech in techniques:
+        q_ids = tech_qs[tech.id]
+        if not q_ids:
+            new_pos[tech.id] = NodePosition(x=tech.position.x, y=cy)
+            cy += Q_GAP
+        else:
+            block_h = (len(q_ids) - 1) * Q_GAP
+            # Center technique in its question block
+            new_pos[tech.id] = NodePosition(x=tech.position.x, y=cy + block_h // 2)
+            for j, qid in enumerate(q_ids):
+                new_pos[qid] = NodePosition(x=questions[qid].position.x, y=cy + j * Q_GAP)
+            cy += block_h + Q_GAP + GRP_GAP
+
+    for qid in orphan_qs:
+        new_pos[qid] = NodePosition(x=questions[qid].position.x, y=cy)
+        cy += Q_GAP
+
+    return [
+        Node(id=n.id, type=n.type, position=new_pos.get(n.id, n.position), data=n.data)
+        for n in nodes
+    ]
+
+
 def _parse_json_nodes(
     text: str,
     type_offset: dict[str, int] | None = None,
@@ -221,10 +273,15 @@ def _parse_json_nodes(
                 metadata=n.get("metadata"),
             ),
         ))
-    edges = [
-        Edge(id=e["id"], source=e["source"], target=e["target"], animated=True)
-        for e in raw.get("edges", [])
-    ]
+    # Deduplicate edges: drop structural dupes and bidirectional pairs (keep first direction seen)
+    seen_pairs: set[frozenset[str]] = set()
+    edges: list[Edge] = []
+    for e in raw.get("edges", []):
+        pair = frozenset({e["source"], e["target"]})
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        edges.append(Edge(id=e["id"], source=e["source"], target=e["target"], animated=True))
     return nodes, edges
 
 
@@ -255,9 +312,10 @@ node_type must be exactly one of: goal, data_source, technique, question, findin
 {grounding_rule}
 CHAINING RULES:
 - Any node can connect to any other node — not just goal-1
-- Build deep chains: data_source → technique → question
+- Build fan structures: technique → multiple questions (NOT question → question chains)
+- A technique should branch out to 2-4 questions, not create a single linear chain
+- Questions are LEAF nodes — do NOT connect a question to another question
 - Edges show reasoning flow and dependencies between ideas
-- A technique can lead to multiple questions
 
 {nodes_spec}"""
 
@@ -414,6 +472,16 @@ Build chains — any node can connect to any other. Go deep."""
     if column_names and nodes:
         nodes = _critic_pass(nodes, column_names)
 
+    # Connect any island nodes to goal-1
+    all_node_ids = {n.id for n in nodes}
+    connected = {e.source for e in edges} | {e.target for e in edges}
+    for n in nodes:
+        if n.id not in connected and n.data.type != "goal" and "goal-1" in all_node_ids:
+            edges.append(Edge(id=f"e-goal1-{n.id}", source="goal-1", target=n.id, animated=True))
+
+    # Re-layout to minimise edge crossings
+    nodes = _layout_min_crossings(nodes, edges)
+
     return nodes, edges
 
 
@@ -443,21 +511,27 @@ def generate_research_nodes(
     column_list = ", ".join(column_names) if column_names else ""
     known_columns = set(column_names) if column_names else None
 
+    BATCH = 3  # candidates per round per category
+
     if curiosity_outputs:
-        all_remaining_q = [
+        # Filter out candidates already covered by label (initial map), then page by iteration
+        all_q = [
             q for q in curiosity_outputs.get("question_candidates", [])
             if not any(q["label"].lower() in label.lower() or label.lower() in q["label"].lower()
                        for label in existing_labels)
         ]
-        all_remaining_t = [
+        all_t = [
             t for t in curiosity_outputs.get("technique_candidates", [])
             if not any(t["label"].lower() in label.lower() or label.lower() in t["label"].lower()
                        for label in existing_labels)
         ]
 
-        remaining_q = all_remaining_q[:4]
-        remaining_t = all_remaining_t[:4]
-        has_more = len(all_remaining_q) > 4 or len(all_remaining_t) > 4
+        # Slice by iteration so each round gets a fresh window — no re-injection of prior candidates
+        q_start = (iteration - 1) * BATCH
+        t_start = (iteration - 1) * BATCH
+        remaining_q = all_q[q_start:q_start + BATCH]
+        remaining_t = all_t[t_start:t_start + BATCH]
+        has_more = len(all_q) > q_start + BATCH or len(all_t) > t_start + BATCH
 
         if not remaining_q and not remaining_t:
             return [], [], False
@@ -470,37 +544,68 @@ Goal: {goal}
 Current map nodes:
 {existing}
 
-New questions not yet covered — add the most important as question nodes:
+New questions not yet covered — pick the most important and add as question nodes:
 {questions_text or '(none remaining)'}
 
-New technique suggestions not yet covered — add the most relevant as technique nodes:
+New technique suggestions not yet covered — pick the most relevant and add as technique nodes:
 {techniques_text or '(none remaining)'}
 
-Add only nodes NOT already in the map. If nothing meaningful, return empty nodes array.
+Add at most 4 nodes total. Only add nodes NOT already in the map.
+If nothing meaningful to add, return empty nodes array.
 Use ids like "r{iteration}-q1", "r{iteration}-t1".
-IMPORTANT: Connect nodes to each other meaningfully — not just to goal-1.
-Build chains: technique → question. Any node can connect to any other."""
+IMPORTANT: Techniques fan out to multiple questions. Questions are LEAF nodes — never connect question → question.
+Connect nodes to each other meaningfully, not just to goal-1."""
     else:
-        has_more = True
+        has_more = iteration < 2  # without curiosity data, cap at 2 rounds
         spec = f"""Expand this analysis map (iteration {iteration}).
 Goal: {goal}
 
 Current nodes:
 {existing}
 
-Add 2-4 new nodes that deepen the analysis:
+Add 2-3 new nodes that deepen the analysis:
 - technique nodes (ids: "tech-{iteration}-1", ...) — specific analysis methods
 - question nodes (ids: "q-{iteration}-1", ...) — clarifying or probing questions
 
-IMPORTANT: Connect nodes to each other meaningfully — not just to goal-1.
-Existing node ids are listed above — reference them in edges.
+Add at most 3 nodes total.
+IMPORTANT: Techniques fan out to questions. Questions are LEAF nodes — never connect question → question.
 If you have nothing meaningful to add, return an empty nodes array."""
 
     result_nodes, result_edges = _parse_json_nodes(
         _call(_map_prompt(spec, column_list)), type_offset, known_columns
     )
+
+    # Strip existing nodes the LLM echoed back
+    existing_ids = {n.id for n in nodes}
+    result_nodes = [n for n in result_nodes if n.id not in existing_ids]
+
+    # Connect any island nodes (no edges touching them) to goal-1 as fallback
+    all_ids = existing_ids | {n.id for n in result_nodes}
+    connected = {e.source for e in result_edges} | {e.target for e in result_edges}
+    for n in result_nodes:
+        if n.id not in connected and "goal-1" in all_ids:
+            result_edges.append(Edge(
+                id=f"e-goal1-{n.id}", source="goal-1", target=n.id, animated=True
+            ))
+
+    # Deduplicate edges by (source, target) pair — drop exact dupes
+    seen_edges: set[tuple[str, str]] = set()
+    deduped_edges = []
+    for e in result_edges:
+        key = (e.source, e.target)
+        if key not in seen_edges:
+            seen_edges.add(key)
+            deduped_edges.append(e)
+    result_edges = deduped_edges
+
     if not result_nodes:
         has_more = False
+    else:
+        # Layout new nodes starting below the lowest existing node
+        all_existing_y = [n.position.y for n in nodes] or [80]
+        start_y = int(max(all_existing_y)) + 280
+        result_nodes = _layout_min_crossings(result_nodes, result_edges, start_y=start_y)
+
     return result_nodes, result_edges, has_more
 
 
@@ -613,11 +718,10 @@ Output 2-3 QUICK lines only. No other text."""
                 confidence = 0.9
 
             fid = f"qf-{qf_index}"
-            qf_index += 1
             node_dict = {
                 "id": fid,
                 "type": "findingNode",
-                "position": {"x": 1280, "y": 80 + qf_index * 200},
+                "position": {"x": 1280, "y": 80 + qf_index * 240},
                 "data": {
                     "label": label,
                     "description": description,
@@ -633,6 +737,7 @@ Output 2-3 QUICK lines only. No other text."""
                 "animated": True,
             }
             results.append((node_dict, edge_dict))
+            qf_index += 1
             if qf_index >= 3:
                 break
         return results
@@ -705,10 +810,9 @@ Your task:
                     except ValueError:
                         confidence = 0.8
                     fid = f"finding-{finding_index}"
-                    finding_index += 1
                     node = {
                         "id": fid, "type": "findingNode",
-                        "position": {"x": 780, "y": 120 + finding_index * 190},
+                        "position": {"x": 1280, "y": 80 + (3 + finding_index) * 240},
                         "data": {
                             "label": label, "description": description,
                             "type": "finding", "status": "complete",
@@ -717,6 +821,7 @@ Your task:
                     }
                     edge = {"id": f"e-goal-{fid}", "source": "goal-1",
                             "target": fid, "animated": True}
+                    finding_index += 1
                     yield {"event": "node_add",
                            "data": json.dumps({"node": node, "edge": edge})}
 

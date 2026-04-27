@@ -8,7 +8,7 @@ import type { ContextRequest, DattackNode, DattackEdge } from './types/graph'
 
 type Phase = 'context' | 'map' | 'analysis' | 'viz'
 
-const MAX_RESEARCH_ROUNDS = 8
+const MAX_RESEARCH_ROUNDS = 4
 const MIN_RESEARCH_ROUNDS = 2
 
 const PHASE_LABELS: Record<Phase, string> = {
@@ -25,16 +25,20 @@ function mergeNodes(existing: DattackNode[], incoming: DattackNode[]): DattackNo
 
 function mergeEdges(existing: DattackEdge[], incoming: DattackEdge[]): DattackEdge[] {
   const ids = new Set(existing.map((e) => e.id))
-  let counter = 0
-  return [
-    ...existing,
-    ...incoming.map((e) => {
-      if (!ids.has(e.id)) { ids.add(e.id); return e }
-      const unique = `${e.id}-${++counter}`
-      ids.add(unique)
-      return { ...e, id: unique }
-    }),
-  ]
+  const pairs = new Set(existing.map((e) => `${e.source}→${e.target}`))
+  // Track unordered pairs to catch bidirectional dupes (A→B already exists, drop B→A)
+  const unordered = new Set(existing.map((e) => [e.source, e.target].sort().join('|')))
+  const result = [...existing]
+  for (const e of incoming) {
+    const pair = `${e.source}→${e.target}`
+    const key = [e.source, e.target].sort().join('|')
+    if (ids.has(e.id) || pairs.has(pair) || unordered.has(key)) continue
+    ids.add(e.id)
+    pairs.add(pair)
+    unordered.add(key)
+    result.push(e)
+  }
+  return result
 }
 
 function Nav({ phase, onPhaseClick }: { phase: Phase; onPhaseClick?: (p: Phase) => void }) {
@@ -111,6 +115,8 @@ export default function App() {
       try {
         const res = await runResearch(pid, [...nodes, ...researchNodes])
         if (!res.new_nodes.length) break
+        console.log(`[MAP] research wave ${i + 1} +${res.new_nodes.length} nodes:`, res.new_nodes.map(n => `${n.id} ${n.data.type} "${n.data.label}"`))
+        console.log(`[MAP] research wave ${i + 1} edges:`, res.new_edges.map((e: DattackEdge) => `${e.source} → ${e.target}`))
         nodes = mergeNodes(nodes, res.new_nodes)
         edges = mergeEdges(edges, res.new_edges)
         setResearchNodes(ns => mergeNodes(ns, res.new_nodes))
@@ -136,6 +142,8 @@ export default function App() {
       setResearchNodes([])
       setResearchEdges([])
       setResearchWave(0)
+      console.log(`[MAP] initial nodes (${res.nodes.length}):`, res.nodes.map(n => `${n.id} ${n.data.type} "${n.data.label}"`))
+      console.log(`[MAP] initial edges (${res.edges.length}):`, res.edges.map(e => `${e.source} → ${e.target}`))
       setPhase('map')
       if (pid) runResearchLoop(pid, res.nodes, res.edges)
     } finally {
@@ -157,6 +165,13 @@ export default function App() {
 
   function handleLog(msg: string) { setStreamLog((l) => [...l, msg]) }
   function handleNodeAdd(node: DattackNode, edge: DattackEdge) {
+    const conf = node.data.metadata?.confidence
+    console.log(
+      `[NODE] ${node.id} | type=${node.data.type} | "${node.data.label}"` +
+      (conf !== undefined ? ` | conf=${typeof conf === 'number' ? (conf * 100).toFixed(0) + '%' : conf}` : '') +
+      ` | pos=(${node.position.x},${node.position.y})` +
+      ` | edge: ${edge.source} → ${node.id}`
+    )
     setAnalysisNodes((ns) => [...ns, node])
     setAnalysisEdges((es) => [...es, edge])
   }

@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { DattackNode, DattackEdge } from '../types/graph'
-import MapView from './MapView'
 
 const TYPE_COLORS: Record<string, string> = {
   finding: '#065F46',
@@ -23,89 +22,92 @@ function confidenceLabel(v: number) {
   return { label: 'Low', color: '#6B21A8' }
 }
 
-// Extract "value label" pairs from description text for mini bar charts
-function extractStats(text: string): Array<{ label: string; value: number; unit: string }> {
-  const out: Array<{ label: string; value: number; unit: string }> = []
-  // "44% of customers" / "58% of revenue"
-  const pct = /(\d+(?:\.\d+)?)\s*%\s+(?:of\s+)?([a-zA-Z][a-zA-Z ]{2,24})/g
+// Extract ALL percentages from text
+function extractPercentages(text: string): Array<{ label: string; value: number }> {
+  const out: Array<{ label: string; value: number }> = []
+  const rx = /(\d+(?:\.\d+)?)\s*%/g
   let m
-  while ((m = pct.exec(text)) !== null && out.length < 4) {
-    out.push({ value: parseFloat(m[1]), label: m[2].trim(), unit: '%' })
-  }
-  // "1.6x" patterns
-  const mult = /(\d+(?:\.\d+)?)x\s+(?:the\s+)?([a-zA-Z][a-zA-Z ]{2,24})/g
-  while ((m = mult.exec(text)) !== null && out.length < 4) {
-    out.push({ value: parseFloat(m[1]) * 50, label: m[2].trim(), unit: 'x' })
+  while ((m = rx.exec(text)) !== null && out.length < 6) {
+    const val = parseFloat(m[1])
+    if (val < 0.1 || val > 100) continue
+    // grab surrounding context as label
+    const before = text.slice(Math.max(0, m.index - 50), m.index).trim()
+    const words = before.split(/\s+/).slice(-4).join(' ')
+    out.push({ label: words || `${val}%`, value: val })
   }
   return out
 }
 
-// SVG donut gauge
-function ConfidenceGauge({ value, color, size = 80 }: { value: number; color: string; size?: number }) {
-  const r = size / 2 - 8
-  const cx = size / 2, cy = size / 2
-  const circ = 2 * Math.PI * r
-  const filled = circ * value
-  const pct = Math.round(value * 100)
-  return (
-    <svg width={size} height={size} style={{ display: 'block' }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth={7} />
-      <circle
-        cx={cx} cy={cy} r={r}
-        fill="none"
-        stroke={color}
-        strokeWidth={7}
-        strokeDasharray={`${filled} ${circ}`}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${cx} ${cy})`}
-        style={{ transition: 'stroke-dasharray 0.6s ease' }}
-      />
-      <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle"
-        style={{ fontSize: 13, fontWeight: 900, fontFamily: 'var(--font-display)', fill: color }}>
-        {pct}%
-      </text>
-    </svg>
-  )
+// Extract "X ... compared to Y" or "X vs Y" (words can be between)
+function extractComparisons(text: string): Array<{ a: number; aLabel: string; b: number; bLabel: string }> {
+  const out: Array<{ a: number; aLabel: string; b: number; bLabel: string }> = []
+  // "average of 6.20 malnutrition cases compared to 14.55"
+  const rx = /(\d+(?:\.\d+)?)\s+([\w\s]{0,40}?)(?:compared to|versus|vs\.?)\s+(\d+(?:\.\d+)?)/gi
+  let m
+  while ((m = rx.exec(text)) !== null && out.length < 3) {
+    out.push({
+      a: parseFloat(m[1]), aLabel: m[2].trim().slice(0, 24) || 'Group A',
+      b: parseFloat(m[3]), bLabel: 'vs',
+    })
+  }
+  return out
 }
 
-// Horizontal bar chart for all findings
-function FindingsBarChart({ findings, selectedId, onSelect }: {
-  findings: DattackNode[]
-  selectedId: string | null
-  onSelect: (n: DattackNode) => void
-}) {
-  if (!findings.length) return null
-  const barH = 22
-  const gap = 8
-  const labelW = 110
-  const barW = 160
-  const totalH = findings.length * (barH + gap)
+// Extract r-values: "r=0.71", "r-value of 0.71", "r = 0.71", "(r=0.71)"
+function extractRValues(text: string): Array<{ r: number; context: string }> {
+  const out: Array<{ r: number; context: string }> = []
+  // matches: r=0.71 / r = 0.71 / r-value of 0.71 / r-value: 0.71
+  const rx = /r(?:[=\s\-](?:value)?(?:\s+of)?(?:\s*[:=])?\s*)(\d+(?:\.\d+)?)/gi
+  let m
+  while ((m = rx.exec(text)) !== null && out.length < 5) {
+    const r = parseFloat(m[1])
+    if (r < 0 || r > 1) continue
+    const ctx = text.slice(Math.max(0, m.index - 30), m.index + m[0].length + 30).trim()
+    out.push({ r, context: ctx.slice(0, 40) })
+  }
+  return out
+}
 
+// Detect finding "type" from text
+type ChartType = 'correlation' | 'comparison' | 'percentage' | 'text'
+function detectChartType(desc: string): ChartType {
+  const t = desc.toLowerCase()
+  const rVals = extractRValues(desc)
+  if (rVals.length > 0) return 'correlation'
+  const comps = extractComparisons(desc)
+  if (comps.length > 0) return 'comparison'
+  const pcts = extractPercentages(desc)
+  if (pcts.length > 0) return 'percentage'
+  if (t.includes('correlat') || t.includes('r=')) return 'correlation'
+  return 'text'
+}
+
+// ---- Chart components ----
+
+function CorrelationBars({ rVals, color }: { rVals: Array<{ r: number; context: string }>; color: string }) {
+  const W = 180, barH = 20, gap = 10
+  const totalH = rVals.length * (barH + gap) + 24
   return (
-    <svg width={labelW + barW + 48} height={totalH} style={{ display: 'block', overflow: 'visible' }}>
-      {findings.map((f, i) => {
-        const conf = getConfidenceNum(f)
-        const { color } = confidenceLabel(conf)
-        const y = i * (barH + gap)
-        const isActive = f.id === selectedId
-        const truncLabel = f.data.label.length > 14 ? f.data.label.slice(0, 13) + '…' : f.data.label
+    <svg width={W + 100} height={totalH} style={{ display: 'block', overflow: 'visible' }}>
+      <text x={0} y={12} style={{ fontSize: 9, fontWeight: 800, fill: '#9a8f85', letterSpacing: '1.5px', textTransform: 'uppercase', fontFamily: 'var(--font-body)' }}>
+        Correlation strength
+      </text>
+      {rVals.map((d, i) => {
+        const y = 20 + i * (barH + gap)
+        const fillW = W * d.r
+        const col = d.r >= 0.7 ? color : d.r >= 0.5 ? '#B45309' : '#6B21A8'
         return (
-          <g key={f.id} style={{ cursor: 'pointer' }} onClick={() => onSelect(f)}>
-            <rect x={0} y={y} width={labelW + barW + 40} height={barH} rx={4}
-              fill={isActive ? `${color}14` : 'transparent'} />
-            <text x={labelW - 6} y={y + barH / 2 + 1} textAnchor="end" dominantBaseline="middle"
-              style={{ fontSize: 10, fontWeight: isActive ? 800 : 600, fill: isActive ? color : '#6a6560', fontFamily: 'var(--font-body)' }}>
-              {truncLabel}
+          <g key={i}>
+            <rect x={0} y={y} width={W} height={barH} rx={4} fill="rgba(0,0,0,0.06)" />
+            <rect x={0} y={y} width={fillW} height={barH} rx={4} fill={col}
+              style={{ transition: 'width 0.6s ease' }} />
+            <text x={fillW + 6} y={y + barH / 2 + 1} dominantBaseline="middle"
+              style={{ fontSize: 10, fontWeight: 800, fill: col, fontFamily: 'var(--font-body)' }}>
+              r={d.r.toFixed(2)}
             </text>
-            {/* Track */}
-            <rect x={labelW} y={y + 6} width={barW} height={10} rx={5} fill="rgba(0,0,0,0.06)" />
-            {/* Fill */}
-            <rect x={labelW} y={y + 6} width={barW * conf} height={10} rx={5} fill={color}
-              style={{ transition: 'width 0.5s ease' }} />
-            {/* Value */}
-            <text x={labelW + barW + 6} y={y + barH / 2 + 1} dominantBaseline="middle"
-              style={{ fontSize: 9, fontWeight: 700, fill: color, fontFamily: 'var(--font-body)' }}>
-              {Math.round(conf * 100)}%
+            <text x={0} y={y + barH + gap - 2}
+              style={{ fontSize: 9, fill: '#6a6560', fontFamily: 'var(--font-body)' }}>
+              {d.context.slice(0, 45)}
             </text>
           </g>
         )
@@ -114,35 +116,122 @@ function FindingsBarChart({ findings, selectedId, onSelect }: {
   )
 }
 
-// Mini stat bars extracted from description
-function StatBars({ stats }: { stats: Array<{ label: string; value: number; unit: string }> }) {
-  if (!stats.length) return null
-  const max = Math.max(...stats.map(s => s.value), 1)
-  const barW = 140
+function ComparisonBars({ comps, color }: { comps: Array<{ a: number; aLabel: string; b: number; bLabel: string }>; color: string }) {
+  const comp = comps[0]
+  const maxV = Math.max(comp.a, comp.b, 0.01)
+  const W = 220, barH = 28
+  const ratio = comp.b > 0 ? (comp.b / comp.a).toFixed(1) : null
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {stats.map((s, i) => (
-        <div key={i}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-            <span style={{ fontSize: 9, fontWeight: 700, color: '#6a6560', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-              {s.label.slice(0, 20)}
-            </span>
-            <span style={{ fontSize: 10, fontWeight: 800, color: '#1a1612' }}>
-              {s.unit === '%' ? `${s.value}%` : `${(s.value / 50).toFixed(1)}x`}
-            </span>
-          </div>
-          <div style={{ background: 'rgba(0,0,0,0.06)', borderRadius: 4, height: 6, width: barW }}>
-            <div style={{
-              background: 'linear-gradient(90deg, #065F46, #059669)',
-              borderRadius: 4, height: '100%',
-              width: `${Math.min((s.value / max) * 100, 100)}%`,
-              transition: 'width 0.5s ease',
-            }} />
-          </div>
-        </div>
-      ))}
+    <svg width={W + 80} height={110} style={{ display: 'block', overflow: 'visible' }}>
+      <text x={0} y={12} style={{ fontSize: 9, fontWeight: 800, fill: '#9a8f85', letterSpacing: '1.5px', textTransform: 'uppercase', fontFamily: 'var(--font-body)' }}>
+        Comparison
+      </text>
+      {/* Bar A */}
+      <text x={0} y={30} style={{ fontSize: 9, fontWeight: 600, fill: '#6a6560', fontFamily: 'var(--font-body)' }}>High</text>
+      <rect x={40} y={16} width={W} height={barH} rx={5} fill="rgba(0,0,0,0.06)" />
+      <rect x={40} y={16} width={W * (comp.a / maxV)} height={barH} rx={5} fill={color}
+        style={{ transition: 'width 0.6s ease' }} />
+      <text x={44 + W * (comp.a / maxV)} y={33} dominantBaseline="middle"
+        style={{ fontSize: 11, fontWeight: 800, fill: color, fontFamily: 'var(--font-body)' }}>{comp.a}</text>
+      {/* Bar B */}
+      <text x={0} y={73} style={{ fontSize: 9, fontWeight: 600, fill: '#6a6560', fontFamily: 'var(--font-body)' }}>Low</text>
+      <rect x={40} y={58} width={W} height={barH} rx={5} fill="rgba(0,0,0,0.06)" />
+      <rect x={40} y={58} width={W * (comp.b / maxV)} height={barH} rx={5} fill="#B45309"
+        style={{ transition: 'width 0.6s ease' }} />
+      <text x={44 + W * (comp.b / maxV)} y={75} dominantBaseline="middle"
+        style={{ fontSize: 11, fontWeight: 800, fill: '#B45309', fontFamily: 'var(--font-body)' }}>{comp.b}</text>
+      {ratio && (
+        <text x={40} y={105}
+          style={{ fontSize: 10, fill: '#9a8f85', fontFamily: 'var(--font-body)' }}>
+          {`Low group is ${ratio}× higher`}
+        </text>
+      )}
+    </svg>
+  )
+}
+
+function PctBars({ pcts, color }: { pcts: Array<{ label: string; value: number }>; color: string }) {
+  const maxV = Math.max(...pcts.map(p => p.value), 1)
+  const W = 200, barH = 22, gap = 8
+  const totalH = pcts.length * (barH + gap) + 24
+  return (
+    <svg width={W + 80} height={totalH} style={{ display: 'block', overflow: 'visible' }}>
+      <text x={0} y={12} style={{ fontSize: 9, fontWeight: 800, fill: '#9a8f85', letterSpacing: '1.5px', textTransform: 'uppercase', fontFamily: 'var(--font-body)' }}>
+        Key percentages
+      </text>
+      {pcts.map((p, i) => {
+        const y = 20 + i * (barH + gap)
+        const fillW = W * (p.value / maxV)
+        return (
+          <g key={i}>
+            <rect x={0} y={y} width={W} height={barH} rx={4} fill="rgba(0,0,0,0.06)" />
+            <rect x={0} y={y} width={fillW} height={barH} rx={4} fill={color}
+              style={{ transition: 'width 0.6s ease' }} />
+            <text x={fillW + 5} y={y + barH / 2 + 1} dominantBaseline="middle"
+              style={{ fontSize: 10, fontWeight: 800, fill: color, fontFamily: 'var(--font-body)' }}>{p.value}%</text>
+            <text x={0} y={y + barH + gap - 2}
+              style={{ fontSize: 9, fill: '#6a6560', fontFamily: 'var(--font-body)' }}>
+              {p.label.slice(0, 50)}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function FindingChart({ node, color }: { node: DattackNode; color: string }) {
+  const desc = node.data.description ?? ''
+  const chartType = detectChartType(desc)
+
+  if (chartType === 'correlation') {
+    const rVals = extractRValues(desc)
+    if (rVals.length > 0) return <CorrelationBars rVals={rVals} color={color} />
+    // has "correlation" text but no r= found — fall to text
+  }
+  if (chartType === 'comparison') {
+    const comps = extractComparisons(desc)
+    if (comps.length > 0) return <ComparisonBars comps={comps} color={color} />
+  }
+  if (chartType === 'percentage') {
+    const pcts = extractPercentages(desc)
+    if (pcts.length > 0) return <PctBars pcts={pcts} color={color} />
+  }
+
+  // Text fallback — styled quote block
+  return (
+    <div style={{
+      background: `${color}08`, border: `1px solid ${color}22`,
+      borderRadius: 8, padding: '12px 16px',
+    }}>
+      <div style={{ fontSize: 11, color: '#4a4540', lineHeight: 1.7, fontWeight: 500 }}>
+        {desc || 'No additional data available.'}
+      </div>
     </div>
   )
+}
+
+// Auto-group findings by topic keywords
+function groupFindings(findings: DattackNode[]): Array<{ group: string; nodes: DattackNode[] }> {
+  const groups: Record<string, DattackNode[]> = {}
+  for (const f of findings) {
+    const text = (f.data.label + ' ' + (f.data.description ?? '')).toLowerCase()
+    let g = 'General'
+    if (text.match(/correlat|r=|r-value|scatter/)) g = 'Correlations'
+    else if (text.match(/food|nutriti|caloric|protein|stunting|wasting|underweight/)) g = 'Nutrition'
+    else if (text.match(/region|east|west|north|south|geographic|area/)) g = 'Regional'
+    else if (text.match(/income|economic|wealth|access|healthcare|water/)) g = 'Socioeconomic'
+    else if (text.match(/segment|concentrat|pareto|top|bottom|rank/)) g = 'Distribution'
+    else if (text.match(/time|season|temporal|trend|year|month|quarter/)) g = 'Temporal'
+    if (!groups[g]) groups[g] = []
+    groups[g].push(f)
+  }
+  const result: Array<{ group: string; nodes: DattackNode[] }> = []
+  for (const [g, nodes] of Object.entries(groups)) {
+    if (nodes.length > 0) result.push({ group: g, nodes })
+  }
+  result.sort((a, b) => b.nodes.length - a.nodes.length)
+  return result
 }
 
 interface Props {
@@ -151,14 +240,14 @@ interface Props {
   streamLog: string[]
 }
 
-export default function VizPanel({ nodes, edges, streamLog }: Props) {
+export default function VizPanel({ nodes, edges: _edges, streamLog }: Props) {
   const findings = nodes.filter((n) => n.data.type === 'finding' || n.data.type === 'insight')
   const [selected, setSelected] = useState<DattackNode | null>(findings[0] ?? null)
 
   const selConf = selected ? getConfidenceNum(selected) : 0
   const selConfStyle = confidenceLabel(selConf)
-  const selStats = selected ? extractStats(selected.data.description ?? '') : []
   const selColor = selected ? (TYPE_COLORS[selected.data.type] ?? '#065F46') : '#065F46'
+  const groups = groupFindings(findings)
 
   return (
     <div style={{ paddingTop: 64, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -180,69 +269,70 @@ export default function VizPanel({ nodes, edges, streamLog }: Props) {
       </div>
 
       {/* Main grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: 12, flex: 1, overflow: 'hidden', padding: '12px 24px 20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 12, flex: 1, overflow: 'hidden', padding: '12px 24px 20px' }}>
 
-        {/* Left: finding list */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', paddingRight: 4 }}>
+        {/* Left: grouped finding list */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, overflowY: 'auto', paddingRight: 4 }}>
           {findings.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--gray)', fontWeight: 500, padding: '20px 0' }}>
-              No findings generated yet.
-            </div>
+            <div style={{ fontSize: 13, color: 'var(--gray)', fontWeight: 500, padding: '20px 0' }}>No findings generated yet.</div>
           )}
-          {findings.map((f) => {
-            const tagColor = TYPE_COLORS[f.data.type] ?? '#065F46'
-            const conf = getConfidenceNum(f)
-            const confStyle = confidenceLabel(conf)
-            const isActive = selected?.id === f.id
-            return (
-              <div
-                key={f.id}
-                onClick={() => setSelected(f)}
-                className="clay-card"
-                style={{
-                  padding: '14px 16px', cursor: 'pointer',
-                  borderLeft: `4px solid ${tagColor}`,
-                  boxShadow: isActive
-                    ? `0 8px 0 0 ${tagColor}55, 0 12px 28px ${tagColor}22, inset 0 1.5px 0 rgba(255,255,255,0.8)`
-                    : undefined,
-                  transform: isActive ? 'translateY(-2px)' : undefined,
-                  transition: 'transform .15s, box-shadow .15s',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: tagColor }}>
-                    {f.data.type === 'insight' ? 'Insight' : 'Finding'}
-                  </span>
-                  <span style={{
-                    fontSize: 9, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase',
-                    background: `${confStyle.color}18`, color: confStyle.color,
-                    padding: '2px 8px', borderRadius: 999,
-                  }}>
-                    {confStyle.label}
-                  </span>
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--black)', marginBottom: 5, lineHeight: 1.3 }}>
-                  {f.data.label}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--gray)', lineHeight: 1.4, fontWeight: 500, marginBottom: 8 }}>
-                  {f.data.description}
-                </div>
-                {/* Mini confidence bar */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ flex: 1, background: 'rgba(0,0,0,0.06)', borderRadius: 4, height: 4 }}>
-                    <div style={{
-                      width: `${Math.round(conf * 100)}%`, height: '100%',
-                      background: confStyle.color, borderRadius: 4,
-                      transition: 'width 0.4s ease',
-                    }} />
-                  </div>
-                  <span style={{ fontSize: 9, fontWeight: 800, color: confStyle.color, minWidth: 28 }}>
-                    {Math.round(conf * 100)}%
-                  </span>
-                </div>
+          {groups.map(({ group, nodes: gNodes }) => (
+            <div key={group}>
+              <div style={{
+                fontSize: 8, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase',
+                color: 'var(--gray)', padding: '8px 0 4px',
+                borderBottom: '1px solid var(--line)', marginBottom: 4,
+              }}>
+                {group} · {gNodes.length}
               </div>
-            )
-          })}
+              {gNodes.map((f) => {
+                const tagColor = TYPE_COLORS[f.data.type] ?? '#065F46'
+                const conf = getConfidenceNum(f)
+                const confStyle = confidenceLabel(conf)
+                const isActive = selected?.id === f.id
+                return (
+                  <div
+                    key={f.id}
+                    onClick={() => setSelected(f)}
+                    className="clay-card"
+                    style={{
+                      padding: '12px 14px', cursor: 'pointer', marginBottom: 6,
+                      borderLeft: `4px solid ${tagColor}`,
+                      boxShadow: isActive
+                        ? `0 8px 0 0 ${tagColor}55, 0 12px 28px ${tagColor}22, inset 0 1.5px 0 rgba(255,255,255,0.8)`
+                        : undefined,
+                      transform: isActive ? 'translateY(-2px)' : undefined,
+                      transition: 'transform .15s, box-shadow .15s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 5, gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--black)', lineHeight: 1.3, flex: 1 }}>
+                        {f.data.label}
+                      </span>
+                      <span style={{
+                        fontSize: 8, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase',
+                        background: `${confStyle.color}18`, color: confStyle.color,
+                        padding: '2px 7px', borderRadius: 999, flexShrink: 0,
+                      }}>
+                        {confStyle.label}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ flex: 1, background: 'rgba(0,0,0,0.06)', borderRadius: 4, height: 3 }}>
+                        <div style={{
+                          width: `${Math.round(conf * 100)}%`, height: '100%',
+                          background: confStyle.color, borderRadius: 4, transition: 'width 0.4s ease',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 8, fontWeight: 800, color: confStyle.color, minWidth: 24 }}>
+                        {Math.round(conf * 100)}%
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
 
           {/* Stream log */}
           {streamLog.length > 0 && (
@@ -250,91 +340,57 @@ export default function VizPanel({ nodes, edges, streamLog }: Props) {
               <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 8 }}>
                 Analysis Log
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                {streamLog.map((entry, i) => (
-                  <div key={i} style={{
-                    fontSize: 10, fontWeight: 500, color: entry.startsWith('✓') ? '#065F46' : 'var(--gray)',
-                    lineHeight: 1.5, fontFamily: 'monospace',
-                  }}>
-                    {entry}
-                  </div>
-                ))}
-              </div>
+              {streamLog.map((entry, i) => (
+                <div key={i} style={{
+                  fontSize: 10, fontWeight: 500, lineHeight: 1.5, fontFamily: 'monospace',
+                  color: entry.startsWith('✓') ? '#065F46' : 'var(--gray)',
+                }}>
+                  {entry}
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Right: charts + map */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
-
-          {/* Charts row */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, flexShrink: 0 }}>
-
-            {/* Chart 1: All findings confidence bar chart */}
-            <div className="clay-card" style={{ padding: '16px 20px', overflow: 'hidden' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 12 }}>
-                Confidence by Finding
+        {/* Right: selected finding detail */}
+        <div style={{ overflowY: 'auto' }}>
+          {selected ? (
+            <div className="clay-card" style={{ padding: '24px 28px' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: selColor }}>
+                  {selected.data.type === 'insight' ? 'Insight' : 'Finding'}
+                </span>
+                <span style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase',
+                  background: `${selConfStyle.color}18`, color: selConfStyle.color,
+                  padding: '2px 8px', borderRadius: 999,
+                }}>
+                  {selConfStyle.label} · {Math.round(selConf * 100)}%
+                </span>
               </div>
-              {findings.length > 0 ? (
-                <div style={{ overflowY: 'auto', maxHeight: 180 }}>
-                  <FindingsBarChart
-                    findings={findings}
-                    selectedId={selected?.id ?? null}
-                    onSelect={setSelected}
-                  />
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--gray)', fontStyle: 'italic' }}>No findings yet.</div>
-              )}
-            </div>
 
-            {/* Chart 2: Selected finding detail + gauge */}
-            <div className="clay-card" style={{ padding: '16px 20px' }}>
-              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 12 }}>
-                Selected Finding
+              {/* Title */}
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'var(--black)', lineHeight: 1.25, marginBottom: 12, fontFamily: 'var(--font-display)' }}>
+                {selected.data.label}
               </div>
-              {selected ? (
-                <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <div style={{ flexShrink: 0 }}>
-                    <ConfidenceGauge value={selConf} color={selConfStyle.color} size={90} />
-                    <div style={{ textAlign: 'center', marginTop: 4 }}>
-                      <span style={{
-                        fontSize: 8, fontWeight: 800, letterSpacing: '1px', textTransform: 'uppercase',
-                        background: `${selConfStyle.color}18`, color: selConfStyle.color,
-                        padding: '2px 8px', borderRadius: 999,
-                      }}>
-                        {selConfStyle.label} Confidence
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: selColor, marginBottom: 4, lineHeight: 1.3 }}>
-                      {selected.data.label}
-                    </div>
-                    {selStats.length > 0 ? (
-                      <StatBars stats={selStats} />
-                    ) : (
-                      <div style={{ fontSize: 10, color: 'var(--gray)', lineHeight: 1.5, fontWeight: 500 }}>
-                        {selected.data.description}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 12, color: 'var(--gray)', fontStyle: 'italic' }}>Select a finding.</div>
-              )}
-            </div>
-          </div>
 
-          {/* Map */}
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden', borderRadius: 16, border: '1px solid var(--line)', minHeight: 0 }}>
-            <MapView
-              nodes={nodes}
-              edges={edges}
-              onApprove={() => {}}
-              hideToolbar
-            />
-          </div>
+              {/* Description */}
+              <div style={{ fontSize: 13, color: '#4a4540', lineHeight: 1.7, fontWeight: 500, marginBottom: 24, paddingBottom: 24, borderBottom: '1px solid var(--line)' }}>
+                {selected.data.description}
+              </div>
+
+              {/* Chart */}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase', color: 'var(--gray)', marginBottom: 14 }}>
+                  Data Visualization
+                </div>
+                <FindingChart node={selected} color={selColor} />
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--gray)', fontStyle: 'italic', padding: 20 }}>Select a finding from the left.</div>
+          )}
         </div>
       </div>
     </div>
